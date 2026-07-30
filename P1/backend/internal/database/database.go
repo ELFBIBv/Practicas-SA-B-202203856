@@ -20,14 +20,18 @@ func InitDB(dbName string) *sql.DB {
 
 	log.Println("Conexión exitosa a SQLite")
 
-	// Crear tablas básicas si no existen (solo ejemplo de prueba)
-	createTableSQL := `CREATE TABLE IF NOT EXISTS test (
+	// Crear la tabla de solicitudes operativas si no existe
+	createTableSQL := `CREATE TABLE IF NOT EXISTS solicitudes_operativas (
 		"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,		
-		"name" TEXT
+		"titulo" TEXT NOT NULL,
+		"area_solicitante" TEXT NOT NULL,
+		"prioridad" INTEGER NOT NULL,
+		"costo_estimado" REAL NOT NULL,
+		"estado" TEXT NOT NULL
 	  );`
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
-		log.Fatalf("Error creando la tabla inicial: %v", err)
+		log.Fatalf("Error creando la tabla solicitudes_operativas: %v", err)
 	}
 
 	return db
