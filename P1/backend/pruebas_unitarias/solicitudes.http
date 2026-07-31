@@ -1,0 +1,91 @@
+@baseUrl = http://localhost:8080
+@solicitudesUrl = {{baseUrl}}/solicitudes
+
+### 1. Healthcheck
+GET {{baseUrl}}/ping
+Accept: application/json
+
+### 2. Obtener todas las solicitudes operativas (Debe estar vacío inicialmente)
+GET {{solicitudesUrl}}
+Accept: application/json
+
+### 3. Crear una nueva solicitud operativa
+# @name createSolicitud
+POST {{solicitudesUrl}}
+Content-Type: application/json
+
+{
+  "titulo": "Adquisicion de nuevo servidor",
+  "area_solicitante": "Infraestructura TI",
+  "prioridad": 1,
+  "costo_estimado": 2500.00,
+  "estado": "registrada"
+}
+
+### 4. Crear otra solicitud operativa (con diferente estado)
+POST {{solicitudesUrl}}
+Content-Type: application/json
+
+{
+  "titulo": "Licencias de Software",
+  "area_solicitante": "Desarrollo",
+  "prioridad": 3,
+  "costo_estimado": 500.00,
+  "estado": "en_proceso"
+}
+
+### 5. Intentar crear una solicitud operativa con datos inválidos (prioridad fuera de rango)
+POST {{solicitudesUrl}}
+Content-Type: application/json
+
+{
+  "titulo": "Compra de monitores",
+  "area_solicitante": "Diseño",
+  "prioridad": 6,
+  "costo_estimado": 1200.00,
+  "estado": "registrada"
+}
+
+### 6. Obtener todas las solicitudes operativas (Ahora debe tener 2 elementos)
+GET {{solicitudesUrl}}
+Accept: application/json
+
+### 7. Actualizar completamente la primera solicitud operativa
+PUT {{solicitudesUrl}}/1
+Content-Type: application/json
+
+{
+  "titulo": "Adquisición de nuevo servidor (Actualizado)",
+  "area_solicitante": "Infraestructura TI y Redes",
+  "prioridad": 2,
+  "costo_estimado": 2800.00,
+  "estado": "en_proceso"
+}
+
+### 8. Actualizar exclusivamente el estado de la primera solicitud operativa
+PATCH {{solicitudesUrl}}/1/estado
+Content-Type: application/json
+
+{
+  "estado": "finalizada"
+}
+
+### 9. Intentar actualizar estado a uno inválido
+PATCH {{solicitudesUrl}}/1/estado
+Content-Type: application/json
+
+{
+  "estado": "cancelado_no_existente"
+}
+
+### 10. Eliminar la segunda solicitud operativa
+DELETE {{solicitudesUrl}}/2
+Accept: application/json
+
+### 11. Intentar eliminar una solicitud que no existe
+DELETE {{solicitudesUrl}}/999
+Accept: application/json
+
+### 12. Obtener todas las solicitudes operativas (Debe tener solo 1 elemento, la ID 1)
+GET {{solicitudesUrl}}
+Accept: application/json
