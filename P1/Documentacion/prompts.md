@@ -51,4 +51,12 @@ REST.
 
 ```
 
+# Prompt 4:
 
+```
+He revisado la estructura del proyecto y los requerimientos. He creado un Plan de Implementación detallado para abordar la creación del CRUD completo de "Solicitudes Operativas" aplicando principios SOLID y utilizando buenas prácticas de REST (Clean Architecture en capas).
+
+Por favor, revisa el plan en el documento generado a la derecha. Si estás de acuerdo con la estrategia de separar el código en Modelos, Repositorios, Servicios y Controladores/Handlers, aprueba el plan para que pueda comenzar con la escritura del código. Si deseas que se ajuste algo en los campos, en el diseño, o si tienes alguna preferencia en cuanto al formato de las respuestas (JSON), házmelo saber.
+```
+
+yo le dije que el plan estaba bien haciendo esta observacion ```crea una carpeta llamada pruebas_unitarias y colocar un archivo .http realizando pruebas para cada endpoints de manera exhaustiva```
