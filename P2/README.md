@@ -87,6 +87,36 @@ sequenceDiagram
     Backend-->>Frontend: Datos de Ruta 1 o Acceso Denegado
 ```
 
+## Diagrama de Arquitectura de Servicios
+
+```mermaid
+graph TD
+    Client[Navegador del Usuario<br/>Frontend React + Vite] -->|Puerto 5173| FrontendApp
+    
+    subgraph FrontendApp [Frontend]
+        ReactUI(UI y Componentes)
+    end
+    
+    ReactUI -->|HTTP / REST<br/>Puerto 3000| BackendApp
+    
+    subgraph BackendApp [Backend Principal Node.js]
+        API(Rutas y Lógica)
+        JWT_Middleware(Middleware de Sesión)
+    end
+    
+    API -->|TCP / Puerto 5432| Database
+    
+    subgraph Data [Capa de Datos]
+        Database[(PostgreSQL DB)]
+    end
+    
+    JWT_Middleware -->|HTTP POST<br/>Puerto 4000<br/>Lógica Retry| AuthService
+    
+    subgraph AuthService [Microservicio de Autorización]
+        RoleValidator(Validador de Permisos)
+    end
+```
+
 ## Los 5 Principios SOLID aplicados
 
 1. **S - Single Responsibility Principle (Responsabilidad Única):**
