@@ -34,6 +34,9 @@ export const decodeTokenUnsafe = (token: string): any => {
 
 export const setAuthCookie = (res: Response, token: string) => {
     res.cookie('jwt', token, {
+        // Al establecer httpOnly en true, evitamos ataques XSS porque
+        // el Javascript del navegador (Frontend) NO podrá leer esta cookie.
+        // El navegador se encargará de enviarla automáticamente en cada petición.
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
