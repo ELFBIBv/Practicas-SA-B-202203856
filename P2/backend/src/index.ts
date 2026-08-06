@@ -31,7 +31,10 @@ app.post('/register', async (req, res) => {
         const nombresEncrypted = encryptAES(nombres);
         const apellidosEncrypted = encryptAES(apellidos);
         const correoEncrypted = encryptAES(correo);
-        const passwordHash = await hashPassword(password);
+        
+        // Flag to toggle between AES and Bcrypt for passwords
+        const useAES = process.env.USE_AES_FOR_PASSWORD === 'true';
+        const passwordHash = useAES ? encryptAES(password) : await hashPassword(password);
         
         let rol = requestedRol === 'Admin' ? 'Admin' : 'Cliente';
         
@@ -69,7 +72,18 @@ app.post('/login', async (req, res) => {
         }
         
         const user = result.rows[0];
-        const isValid = await comparePassword(password, user.password_hash);
+        const useAES = process.env.USE_AES_FOR_PASSWORD === 'true';
+        
+        let isValid = false;
+        if (useAES) {
+            try {
+                isValid = decryptAES(user.password_hash) === password;
+            } catch (e) {
+                isValid = false;
+            }
+        } else {
+            isValid = await comparePassword(password, user.password_hash);
+        }
         
         if (!isValid) {
             res.status(401).json({ message: "Invalid credentials" });
