@@ -1,11 +1,13 @@
 import jwt from 'jsonwebtoken';
 import { Response } from 'express';
 import dotenv from 'dotenv';
+import ms from 'ms';
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+const JWT_GRACE_PERIOD_SEC = parseInt(process.env.JWT_GRACE_PERIOD_SEC || '300');
 
 export interface TokenPayload {
     id: number;
@@ -40,7 +42,7 @@ export const setAuthCookie = (res: Response, token: string) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 3600000 // 1 hour
+        maxAge: Number(ms(JWT_EXPIRES_IN as any)) + (JWT_GRACE_PERIOD_SEC * 1000) // tiempo de vida del JWT + gracia
     });
 };
 
