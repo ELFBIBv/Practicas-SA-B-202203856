@@ -22,23 +22,24 @@ app.use(cookieParser());
 
 app.post('/register', async (req, res) => {
     try {
-        const { carnet, nombres, apellidos, password, rol: requestedRol } = req.body;
-        if (!carnet || !nombres || !apellidos || !password) {
+        const { carnet, nombres, apellidos, correo, password, rol: requestedRol } = req.body;
+        if (!carnet || !nombres || !apellidos || !correo || !password) {
             res.status(400).json({ message: "All fields are required" });
             return;
         }
         
         const nombresEncrypted = encryptAES(nombres);
         const apellidosEncrypted = encryptAES(apellidos);
+        const correoEncrypted = encryptAES(correo);
         const passwordHash = await hashPassword(password);
         
         let rol = requestedRol === 'Admin' ? 'Admin' : 'Cliente';
         
         const query = `
-            INSERT INTO users (carnet, nombres_encrypted, apellidos_encrypted, password_hash, rol)
-            VALUES ($1, $2, $3, $4, $5) RETURNING id, carnet, rol;
+            INSERT INTO users (carnet, nombres_encrypted, apellidos_encrypted, correo_encrypted, password_hash, rol)
+            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, carnet, rol;
         `;
-        const values = [carnet, nombresEncrypted, apellidosEncrypted, passwordHash, rol];
+        const values = [carnet, nombresEncrypted, apellidosEncrypted, correoEncrypted, passwordHash, rol];
         
         const result = await pool.query(query, values);
         res.status(201).json({ message: "User registered successfully", user: result.rows[0] });
@@ -79,8 +80,9 @@ app.post('/login', async (req, res) => {
         setAuthCookie(res, token);
         
         const nombresDecrypted = decryptAES(user.nombres_encrypted);
+        const correoDecrypted = decryptAES(user.correo_encrypted);
         
-        res.status(200).json({ message: `Welcome ${nombresDecrypted}`, rol: user.rol });
+        res.status(200).json({ message: `Welcome ${nombresDecrypted}`, rol: user.rol, correo: correoDecrypted });
     } catch (error: any) {
         res.status(500).json({ message: "Error logging in", error: error.message });
     }

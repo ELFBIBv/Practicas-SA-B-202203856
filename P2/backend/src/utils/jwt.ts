@@ -13,15 +13,23 @@ export interface TokenPayload {
 }
 
 export const generateToken = (payload: TokenPayload): string => {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
 };
 
-export const verifyToken = (token: string): TokenPayload | null => {
+export const verifyToken = (token: string): { payload: TokenPayload | null, expired: boolean } => {
     try {
-        return jwt.verify(token, JWT_SECRET) as TokenPayload;
-    } catch (e) {
-        return null;
+        const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+        return { payload: decoded, expired: false };
+    } catch (e: any) {
+        if (e.name === 'TokenExpiredError') {
+            return { payload: null, expired: true };
+        }
+        return { payload: null, expired: false };
     }
+};
+
+export const decodeTokenUnsafe = (token: string): any => {
+    return jwt.decode(token);
 };
 
 export const setAuthCookie = (res: Response, token: string) => {

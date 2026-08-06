@@ -7,13 +7,16 @@ const client = axios.create({
     baseURL: AUTH_SERVICE_URL,
 });
 
+const RETRY_COUNT = parseInt(process.env.RETRY_COUNT || '3');
+const RETRY_BACKOFF_MS = parseInt(process.env.RETRY_BACKOFF_MS || '1000');
+
 // Configure retry loop with backoff
 axiosRetry(client, {
-    retries: 3, // Number of max retries
+    retries: RETRY_COUNT, // Number of max retries
     retryDelay: (retryCount) => {
-        // Exponential backoff
+        // Exponential backoff or configurable backoff base
         console.log(`Retry attempt: ${retryCount}`);
-        return axiosRetry.exponentialDelay(retryCount);
+        return retryCount * RETRY_BACKOFF_MS; // Simple linear backoff or could be exponential `Math.pow(2, retryCount) * RETRY_BACKOFF_MS`
     },
     retryCondition: (error) => {
         // Retry on network errors or 5xx status codes

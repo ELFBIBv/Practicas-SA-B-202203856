@@ -4,7 +4,7 @@ import axios from 'axios';
 
 export const Register = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ carnet: '', nombres: '', apellidos: '', password: '', rol: 'Cliente' });
+  const [formData, setFormData] = useState({ carnet: '', nombres: '', apellidos: '', correo: '', password: '', rol: 'Cliente' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +57,15 @@ export const Register = () => {
             required
             value={formData.apellidos}
             onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
+          />
+        </div>
+        <div className="form-group">
+          <label>Correo Electrónico</label>
+          <input
+            type="email"
+            required
+            value={formData.correo}
+            onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
           />
         </div>
         <div className="form-group">
