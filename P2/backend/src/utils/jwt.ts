@@ -1,0 +1,38 @@
+import jwt from 'jsonwebtoken';
+import { Response } from 'express';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+
+export interface TokenPayload {
+    id: number;
+    rol: string;
+}
+
+export const generateToken = (payload: TokenPayload): string => {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+};
+
+export const verifyToken = (token: string): TokenPayload | null => {
+    try {
+        return jwt.verify(token, JWT_SECRET) as TokenPayload;
+    } catch (e) {
+        return null;
+    }
+};
+
+export const setAuthCookie = (res: Response, token: string) => {
+    res.cookie('jwt', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 3600000 // 1 hour
+    });
+};
+
+export const clearAuthCookie = (res: Response) => {
+    res.clearCookie('jwt');
+};
