@@ -10,9 +10,31 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Routes to protect and their allowed roles
+const routePermissions: Record<string, string[]> = {
+    '/ruta1': ['Admin'],
+    '/ruta2': ['Admin', 'Cliente']
+};
+
 app.post('/authorize', (req, res) => {
-    // This endpoint will be implemented next
-    res.status(200).json({ message: "Authorization logic will go here" });
+    const { rol, route } = req.body;
+
+    if (!rol || !route) {
+        return res.status(400).json({ allowed: false, message: "Missing rol or route in body" });
+    }
+
+    const allowedRoles = routePermissions[route];
+
+    if (!allowedRoles) {
+        // If route is not defined in permissions, deny by default
+        return res.status(403).json({ allowed: false, message: "Route not protected or not found" });
+    }
+
+    if (allowedRoles.includes(rol)) {
+        return res.status(200).json({ allowed: true, message: "Access granted" });
+    } else {
+        return res.status(403).json({ allowed: false, message: "Access denied" });
+    }
 });
 
 app.listen(PORT, () => {
