@@ -22,7 +22,7 @@ app.use(cookieParser());
 
 app.post('/register', async (req, res) => {
     try {
-        const { carnet, nombres, apellidos, password } = req.body;
+        const { carnet, nombres, apellidos, password, rol: requestedRol } = req.body;
         if (!carnet || !nombres || !apellidos || !password) {
             res.status(400).json({ message: "All fields are required" });
             return;
@@ -32,8 +32,7 @@ app.post('/register', async (req, res) => {
         const apellidosEncrypted = encryptAES(apellidos);
         const passwordHash = await hashPassword(password);
         
-        let rol = 'Cliente';
-        if (carnet === '202203856' || carnet === 'admin') rol = 'Admin';
+        let rol = requestedRol === 'Admin' ? 'Admin' : 'Cliente';
         
         const query = `
             INSERT INTO users (carnet, nombres_encrypted, apellidos_encrypted, password_hash, rol)

@@ -4,7 +4,7 @@ import axios from 'axios';
 
 export const Register = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ carnet: '', nombres: '', apellidos: '', password: '' });
+  const [formData, setFormData] = useState({ carnet: '', nombres: '', apellidos: '', password: '', rol: 'Cliente' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,6 +67,18 @@ export const Register = () => {
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           />
+        </div>
+        <div className="form-group">
+          <label>Rol</label>
+          <select
+            value={formData.rol}
+            onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
+            className="styled-select"
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.2)', backgroundColor: 'rgba(255, 255, 255, 0.1)', color: 'white' }}
+          >
+            <option value="Cliente" style={{ color: 'black' }}>Cliente</option>
+            <option value="Admin" style={{ color: 'black' }}>Admin</option>
+          </select>
         </div>
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? 'Registrando...' : 'Registrarse'}
