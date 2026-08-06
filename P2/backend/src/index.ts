@@ -3,9 +3,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { requireAuth } from './middleware/auth';
-import { initDb, pool } from './utils/db';
+import { pool } from './utils/db';
 import { encryptAES, decryptAES, hashPassword, comparePassword } from './utils/security';
-import { generateToken, setTokenCookie } from './utils/jwt';
+import { generateToken, setAuthCookie } from './utils/jwt';
 
 dotenv.config();
 
@@ -19,8 +19,6 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Initialize DB
-initDb();
 
 app.post('/register', async (req, res) => {
     try {
@@ -78,8 +76,8 @@ app.post('/login', async (req, res) => {
             return;
         }
         
-        const token = generateToken({ carnet: user.carnet, rol: user.rol });
-        setTokenCookie(res, token);
+        const token = generateToken({ id: user.id, rol: user.rol });
+        setAuthCookie(res, token);
         
         const nombresDecrypted = decryptAES(user.nombres_encrypted);
         
