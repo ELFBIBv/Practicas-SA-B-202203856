@@ -15,23 +15,27 @@ services:
   auth-service:
     build: ./auth/auth-service
     ports:
-      - "4000:4000"
+      - "${AUTH_PORT:-4000}:4000"
     environment:
       - PORT=4000
       - DB_HOST=postgres-auth
       - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=auth_db
+      - DB_USER=${AUTH_DB_USER:-postgres}
+      - DB_PASSWORD=${AUTH_DB_PASSWORD:-postgres}
+      - DB_NAME=${AUTH_DB_NAME:-auth_db}
+      - JWT_SECRET=${JWT_SECRET:-supersecret123}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+      - JWT_GRACE_PERIOD_SEC=${JWT_GRACE_PERIOD_SEC:-300}
+      - USE_AES_FOR_PASSWORD=${USE_AES_FOR_PASSWORD:-false}
     depends_on:
       - postgres-auth
     networks:
       - p4-network
 
   # catalog-service:
-  #   build: ./catalog-service
+  #   build: ./catalog/catalog-service
   #   ports:
-  #     - "8000:8000"
+  #     - "${CATALOG_PORT:-8000}:8000"
   #   environment:
   #     - PORT=8000
   #     - MONGO_URI=mongodb://mongo-catalog:27017/catalog_db
@@ -41,16 +45,16 @@ services:
   #     - p4-network
 
   # order-service:
-  #   build: ./order-service
+  #   build: ./orders/order-service
   #   ports:
-  #     - "8001:8001"
+  #     - "${ORDERS_PORT:-8001}:8001"
   #   environment:
   #     - PORT=8001
   #     - DB_HOST=postgres-orders
   #     - DB_PORT=5432
-  #     - DB_USER=postgres
-  #     - DB_PASSWORD=postgres
-  #     - DB_NAME=orders_db
+  #     - DB_USER=${ORDERS_DB_USER:-postgres}
+  #     - DB_PASSWORD=${ORDERS_DB_PASSWORD:-postgres}
+  #     - DB_NAME=${ORDERS_DB_NAME:-orders_db}
   #     - NOTIFICATION_SERVICE_URL=http://notification-service:8080
   #     - CATALOG_SERVICE_URL=http://catalog-service:8000/graphql
   #   depends_on:
@@ -61,9 +65,9 @@ services:
   #     - p4-network
 
   # notification-service:
-  #   build: ./notification-service
+  #   build: ./notifications/notification-service
   #   ports:
-  #     - "8080:8080"
+  #     - "${NOTIFICATIONS_PORT:-8080}:8080"
   #   environment:
   #     - PORT=8080
   #   networks:
@@ -72,9 +76,9 @@ services:
   postgres-auth:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=auth_db
+      - POSTGRES_USER=${AUTH_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${AUTH_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${AUTH_DB_NAME:-auth_db}
     ports:
       - "5432:5432"
     volumes:
@@ -85,9 +89,9 @@ services:
   # postgres-orders:
   #   image: postgres:15-alpine
   #   environment:
-  #     - POSTGRES_USER=postgres
-  #     - POSTGRES_PASSWORD=postgres
-  #     - POSTGRES_DB=orders_db
+  #     - POSTGRES_USER=${ORDERS_DB_USER:-postgres}
+  #     - POSTGRES_PASSWORD=${ORDERS_DB_PASSWORD:-postgres}
+  #     - POSTGRES_DB=${ORDERS_DB_NAME:-orders_db}
   #   ports:
   #     - "5433:5432"
   #   networks:
