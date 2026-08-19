@@ -1,0 +1,49 @@
+@authUrl = http://localhost:80/api/auth
+@catalogUrl = http://localhost:80/api/catalog
+
+### 1. Iniciar Sesión para obtener el Token dinámico
+# @name login
+POST {{authUrl}}/login
+Content-Type: application/json
+
+{
+    "carnet": "202203856",
+    "password": "mypassword"
+}
+
+### Variable token dinámica
+@authToken = {{login.response.body.token}}
+
+### 2. Crear un Producto (GraphQL Mutation)
+# @name createProduct
+POST {{catalogUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "query": "mutation { createProduct(name: \"Laptop Gamer\", description: \"Laptop de alto rendimiento\", price: 1500.00, stock: 10) { product { id name price stock } } }"
+}
+
+### 3. Listar Productos (GraphQL Query)
+POST {{catalogUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "query": "{ products { id name description price stock } }"
+}
+
+### 4. Consultar Producto Específico (GraphQL Query)
+# Utiliza el ID obtenido en el paso 2
+@productId = {{createProduct.response.body.data.createProduct.product.id}}
+
+POST {{catalogUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "query": "{ product(id: \"{{productId}}\") { id name } }"
+}
+
+### 5. Healthcheck
+GET {{catalogUrl}}/health
