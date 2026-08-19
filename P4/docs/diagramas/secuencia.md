@@ -14,9 +14,13 @@ sequenceDiagram
     Client->>API Gateway: POST /api/orders (Crear Pedido GraphQL)
     API Gateway->>OrderService: Enruta petición
     
-    %% Valida productos
-    OrderService->>CatalogService: HTTP POST /api/catalog (Query stock y precios)
-    CatalogService-->>OrderService: Retorna datos del producto
+    %% Valida productos y obtiene precio oficial
+    OrderService->>CatalogService: HTTP POST /graphql (Query producto y stock)
+    CatalogService-->>OrderService: Retorna datos y precio oficial
+
+    %% Descuenta stock
+    OrderService->>CatalogService: HTTP POST /graphql (Mutation descontar stock)
+    CatalogService-->>OrderService: OK (Stock actualizado)
     
     %% Guarda en BD
     OrderService->>DB_Orders: Inserta Order y OrderItems (Transacción)

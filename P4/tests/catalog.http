@@ -19,18 +19,38 @@ Content-Type: application/json
 POST {{catalogUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "mutation { createProduct(name: \"Laptop Gamer\", description: \"Laptop de alto rendimiento\", price: 1500.00, stock: 10) { product { id name price stock } } }"
+mutation {
+  createProduct(
+    name: "Laptop Gamer",
+    description: "Laptop de alto rendimiento",
+    price: 1500.00,
+    stock: 10
+  ) {
+    product {
+      id
+      name
+      price
+      stock
+    }
+  }
 }
 
 ### 3. Listar Productos (GraphQL Query)
 POST {{catalogUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "{ products { id name description price stock } }"
+query {
+  products {
+    id
+    name
+    description
+    price
+    stock
+  }
 }
 
 ### 4. Consultar Producto Específico (GraphQL Query)
@@ -40,9 +60,13 @@ Authorization: Bearer {{authToken}}
 POST {{catalogUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "{ product(id: \"{{productId}}\") { id name } }"
+query {
+  product(id: "{{productId}}") {
+    id
+    name
+  }
 }
 
 ### 5. Healthcheck

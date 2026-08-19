@@ -50,19 +50,64 @@ class Query:
 @strawberry.type
 class Mutation:
     @strawberry.mutation
-    def create_order(self, user_id: int, product_id: str, quantity: int, unit_price: float) -> Order:
+    def create_order(self, user_id: int, product_id: str, quantity: int) -> Order:
+        # 1. Consultar el servicio de catálogo para validar y obtener precio/stock
+        catalog_url = os.getenv("CATALOG_SERVICE_URL", "http://catalog-service:8000/graphql")
+        
+        query = """
+        query($id: String!) {
+            product(id: $id) {
+                id
+                price
+                stock
+            }
+        }
+        """
+        try:
+            res = httpx.post(catalog_url, json={"query": query, "variables": {"id": product_id}}, timeout=5.0)
+            res_data = res.json()
+            product_data = res_data.get("data", {}).get("product")
+            
+            if not product_data:
+                raise Exception("El producto no existe en el catálogo.")
+            if product_data["stock"] < quantity:
+                raise Exception(f"Stock insuficiente. Stock actual: {product_data['stock']}")
+                
+            # Usar el precio oficial en lugar del proporcionado por el usuario
+            official_unit_price = product_data["price"]
+        except httpx.RequestError as e:
+            raise Exception(f"Error al comunicarse con el catálogo: {str(e)}")
+
+        # 2. Descontar stock en el catálogo
+        mutation = """
+        mutation($id: String!, $qty: Int!) {
+            updateProductStock(id: $id, quantityToDiscount: $qty) {
+                id
+                stock
+            }
+        }
+        """
+        try:
+            res_mut = httpx.post(catalog_url, json={"query": mutation, "variables": {"id": product_id, "qty": quantity}}, timeout=5.0)
+            res_mut_data = res_mut.json()
+            if res_mut_data.get("errors"):
+                raise Exception(f"Error al descontar el stock: {res_mut_data['errors']}")
+        except httpx.RequestError as e:
+            raise Exception(f"Error al descontar stock en el catálogo: {str(e)}")
+
+        # 3. Guardar orden en base de datos
         conn = get_db()
         cur = conn.cursor()
-        total = quantity * unit_price
+        total = quantity * official_unit_price
         
-        # 1. Insertar orden
+        # 4. Insertar orden
         cur.execute("INSERT INTO orders (user_id, total, status) VALUES (%s, %s, %s) RETURNING id, created_at", (user_id, total, "PENDING"))
         order_record = cur.fetchone()
         order_id = order_record['id']
         created_at = order_record['created_at']
         
-        # 2. Insertar detalle de orden
-        cur.execute("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (%s, %s, %s, %s)", (order_id, product_id, quantity, unit_price))
+        # 5. Insertar detalle de orden
+        cur.execute("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (%s, %s, %s, %s)", (order_id, product_id, quantity, official_unit_price))
         
         conn.commit()
         conn.close()

@@ -2,7 +2,7 @@ import os
 import strawberry
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from bson.objectid import ObjectId
 
 app = FastAPI(title="Catalog Service")
@@ -46,6 +46,17 @@ class Mutation:
         result = products_collection.insert_one(new_product)
         prod = Product(id=str(result.inserted_id), name=name, description=description, price=price, stock=stock)
         return CreateProductPayload(product=prod)
+
+    @strawberry.mutation
+    def update_product_stock(self, id: str, quantity_to_discount: int) -> Product | None:
+        result = products_collection.find_one_and_update(
+            {"_id": ObjectId(id)},
+            {"$inc": {"stock": -quantity_to_discount}},
+            return_document=ReturnDocument.AFTER
+        )
+        if result:
+            return Product(id=str(result["_id"]), name=result["name"], description=result["description"], price=result["price"], stock=result["stock"])
+        return None
 
 schema = strawberry.Schema(query=Query, mutation=Mutation)
 graphql_app = GraphQLRouter(schema)

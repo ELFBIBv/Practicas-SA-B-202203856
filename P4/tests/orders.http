@@ -20,9 +20,19 @@ Content-Type: application/json
 POST {{catalogUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "mutation { createProduct(name: \"Laptop para Pedido\", description: \"Laptop de prueba\", price: 1500.00, stock: 10) { product { id } } }"
+mutation {
+  createProduct(
+    name: "Laptop para Pedido",
+    description: "Laptop de prueba",
+    price: 1500.00,
+    stock: 10
+  ) {
+    product {
+      id
+    }
+  }
 }
 
 ### Variable ID de producto dinámica
@@ -33,18 +43,35 @@ Authorization: Bearer {{authToken}}
 POST {{ordersUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "mutation { createOrder(userId: 1, productId: \"{{productId}}\", quantity: 2, unitPrice: 1500.00) { id total status createdAt } }"
+mutation {
+  createOrder(
+    userId: 1,
+    productId: "{{productId}}",
+    quantity: 2
+  ) {
+    id
+    total
+    status
+    createdAt
+  }
 }
 
 ### 4. Listar todos los Pedidos (GraphQL Query)
 POST {{ordersUrl}}/graphql
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
 
-{
-    "query": "{ orders { id userId total status createdAt } }"
+query {
+  orders {
+    id
+    userId
+    total
+    status
+    createdAt
+  }
 }
 
 ### 5. Healthcheck

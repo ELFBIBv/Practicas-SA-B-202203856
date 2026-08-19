@@ -10,6 +10,7 @@ graph TD
     Gateway -->|/api/catalog| Catalog[Catalog Service - Python Graphene]
     Gateway -->|/api/orders| Orders[Orders Service - Python Strawberry]
     
+    Orders -.->|HTTP POST /graphql| Catalog
     Orders -.->|HTTP POST /api/notifications| Notifications
     Auth -.->|HTTP POST /api/notifications| Notifications[Notifications Service - Go REST]
     
