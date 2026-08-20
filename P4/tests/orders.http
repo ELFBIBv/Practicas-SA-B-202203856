@@ -1,0 +1,78 @@
+@authUrl = http://localhost:80/api/auth
+@ordersUrl = http://localhost:80/api/orders
+@catalogUrl = http://localhost:80/api/catalog
+
+### 1. Iniciar Sesión para obtener el Token dinámico
+# @name login
+POST {{authUrl}}/login
+Content-Type: application/json
+
+{
+    "carnet": "202203856",
+    "password": "mypassword"
+}
+
+### Variable token dinámica
+@authToken = {{login.response.body.token}}
+
+### 2. Crear un Producto en el Catálogo para usar en el Pedido
+# @name createProduct
+POST {{catalogUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
+
+mutation {
+  createProduct(
+    name: "Laptop para Pedido",
+    description: "Laptop de prueba",
+    price: 1500.00,
+    stock: 10
+  ) {
+    product {
+      id
+    }
+  }
+}
+
+### Variable ID de producto dinámica
+@productId = {{createProduct.response.body.data.createProduct.product.id}}
+
+### 3. Crear un Pedido (GraphQL Mutation)
+# Esto además disparará la notificación al Notification Service
+POST {{ordersUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
+
+mutation {
+  createOrder(
+    userId: 1,
+    productId: "{{productId}}",
+    quantity: 2
+  ) {
+    id
+    total
+    status
+    createdAt
+  }
+}
+
+### 4. Listar todos los Pedidos (GraphQL Query)
+POST {{ordersUrl}}/graphql
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+X-REQUEST-TYPE: GraphQL
+
+query {
+  orders {
+    id
+    userId
+    total
+    status
+    createdAt
+  }
+}
+
+### 5. Healthcheck
+GET {{ordersUrl}}/health

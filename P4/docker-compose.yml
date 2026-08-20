@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-service
+      - catalog-service
+      - order-service
+    networks:
+      - p4-network
+
+  auth-service:
+    build: ./auth/auth-service
+    ports:
+      - "${AUTH_PORT:-4000}:4000"
+    environment:
+      - PORT=4000
+      - DB_HOST=postgres-auth
+      - DB_PORT=5432
+      - DB_USER=${AUTH_DB_USER:-postgres}
+      - DB_PASSWORD=${AUTH_DB_PASSWORD:-postgres}
+      - DB_NAME=${AUTH_DB_NAME:-auth_db}
+      - JWT_SECRET=${JWT_SECRET:-supersecret123}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+      - JWT_GRACE_PERIOD_SEC=${JWT_GRACE_PERIOD_SEC:-300}
+      - USE_AES_FOR_PASSWORD=${USE_AES_FOR_PASSWORD:-false}
+    depends_on:
+      - postgres-auth
+    networks:
+      - p4-network
+
+  catalog-service:
+    build: ./catalog/catalog-service
+    ports:
+      - "${CATALOG_PORT:-8000}:8000"
+    environment:
+      - PORT=8000
+      - MONGO_URI=mongodb://mongo-catalog:27017/catalog_db
+    depends_on:
+      - mongo-catalog
+    networks:
+      - p4-network
+
+  order-service:
+    build: ./orders/order-service
+    ports:
+      - "${ORDERS_PORT:-8001}:8001"
+    environment:
+      - PORT=8001
+      - DB_HOST=postgres-orders
+      - DB_PORT=5432
+      - DB_USER=${ORDERS_DB_USER:-postgres}
+      - DB_PASSWORD=${ORDERS_DB_PASSWORD:-postgres}
+      - DB_NAME=${ORDERS_DB_NAME:-orders_db}
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8080
+      - CATALOG_SERVICE_URL=http://catalog-service:8000/graphql
+    depends_on:
+      - postgres-orders
+      - catalog-service
+      - notification-service
+    networks:
+      - p4-network
+
+  notification-service:
+    build: ./notifications/notification-service
+    ports:
+      - "${NOTIFICATIONS_PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+    networks:
+      - p4-network
+
+  postgres-auth:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${AUTH_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${AUTH_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${AUTH_DB_NAME:-auth_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./auth/auth-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - p4-network
+
+  postgres-orders:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${ORDERS_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${ORDERS_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${ORDERS_DB_NAME:-orders_db}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./orders/orders-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - p4-network
+
+  mongo-catalog:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    networks:
+      - p4-network
+
+networks:
+  p4-network:
+    driver: bridge
