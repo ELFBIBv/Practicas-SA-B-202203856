@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:80/api/auth
+
+### 1. Registrar un Nuevo Usuario (Admin)
+# @name registerAdmin
+POST {{baseUrl}}/register
+Content-Type: application/json
+
+{
+    "carnet": "202203856",
+    "nombres": "Alvaro",
+    "apellidos": "Guzman",
+    "correo": "alvaro@test.com",
+    "password": "mypassword",
+    "rol": "Admin"
+}
+
+### 2. Iniciar Sesión
+# @name loginAdmin
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+    "carnet": "202203856",
+    "password": "mypassword"
+}
+
+### Variable que guarda el token JWT extraído automáticamente del login
+@authToken = {{loginAdmin.response.body.token}}
+
+### 3. Validar Token (Simula lo que haría el API Gateway u otro microservicio)
+POST {{baseUrl}}/validate
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+### 4. Healthcheck
+GET {{baseUrl}}/health
