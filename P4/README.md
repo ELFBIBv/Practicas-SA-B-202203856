@@ -2,6 +2,15 @@
 
 Este repositorio contiene la implementación de un sistema de comercio electrónico basado en microservicios, integrado por contenedores Docker y expuesto a través de un API Gateway (Nginx).
 
+## Cómo Ejecutar el Proyecto
+
+Para levantar todo el ecosistema de microservicios, asegúrate de tener Docker instalado y ejecuta el siguiente comando en la raíz de la carpeta `P4`:
+
+```bash
+docker-compose up --build
+```
+Esto levantará el API Gateway y todos los microservicios en sus respectivos contenedores.
+
 ## Documentación y Diagramas
 
 Los diagramas técnicos para comprender la estructura del sistema se encuentran en la carpeta `docs/diagramas/`:
@@ -9,6 +18,8 @@ Los diagramas técnicos para comprender la estructura del sistema se encuentran 
 - [Diagrama Entidad-Relación (ER)](./docs/diagramas/er.md)
 - [Diagrama de Secuencia](./docs/diagramas/secuencia.md)
 - [Diagrama de Despliegue](./docs/diagramas/despliegue.md)
+- [Diagrama de Casos de Uso](./docs/diagramas/casos_de_uso.md)
+- [Casos de Uso Detallados (Tablas)](./docs/diagramas/casos_de_uso_detallados.md)
 
 ## Principios SOLID
 
