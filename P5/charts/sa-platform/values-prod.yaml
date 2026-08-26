@@ -1,0 +1,42 @@
+global:
+  environment: prod
+
+mysql:
+  primary:
+    persistence:
+      size: 5Gi
+
+apiGateway:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+authService:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+catalogService:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+orderService:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+notificationService:
+  replicaCount: 3
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi

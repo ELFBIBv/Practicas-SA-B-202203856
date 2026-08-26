@@ -1,0 +1,13 @@
+apiVersion: v2
+name: sa-platform
+description: A Helm chart for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.16.0"
+dependencies:
+  - name: mysql
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+  - name: nats
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"

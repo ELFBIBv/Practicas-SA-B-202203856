@@ -1,0 +1,91 @@
+global:
+  environment: dev
+  storageClass: "standard"
+
+mysql:
+  enabled: true
+  auth:
+    database: "sa_p5"
+    username: "user"
+    password: "password123"
+    rootPassword: "rootpassword123"
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+nats:
+  enabled: true
+  auth:
+    enabled: false
+  cluster:
+    enabled: false
+
+apiGateway:
+  replicaCount: 2
+  image:
+    repository: api-gateway
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+authService:
+  replicaCount: 2
+  image:
+    repository: auth-service
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+catalogService:
+  replicaCount: 2
+  image:
+    repository: catalog-service
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+orderService:
+  replicaCount: 2
+  image:
+    repository: order-service
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notificationService:
+  replicaCount: 2
+  image:
+    repository: notification-service
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+cronjobs:
+  schedule1: "*/2 * * * *"
+  schedule2: "*/10 * * * *"

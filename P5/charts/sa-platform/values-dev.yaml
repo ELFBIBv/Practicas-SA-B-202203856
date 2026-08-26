@@ -1,0 +1,42 @@
+global:
+  environment: dev
+
+mysql:
+  primary:
+    persistence:
+      size: 1Gi
+
+apiGateway:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+authService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+catalogService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+orderService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+notificationService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
