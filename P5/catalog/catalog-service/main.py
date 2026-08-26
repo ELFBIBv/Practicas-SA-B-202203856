@@ -65,3 +65,7 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get("/health")
 def health():
     return {"status": "Catalog Service is running"}
+
+@app.get("/")
+def read_root():
+    return {"status": "OK"}

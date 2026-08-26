@@ -131,6 +131,10 @@ app.get('/health', (req, res) => {
     res.json({ status: 'Auth Service is running' });
 });
 
+app.get('/', (req, res) => {
+    res.json({ status: 'OK' });
+});
+
 app.listen(PORT, () => {
     console.log(`Auth Service is running on http://localhost:${PORT}`);
 });

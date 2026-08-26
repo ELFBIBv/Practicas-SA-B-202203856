@@ -23,11 +23,12 @@ spec:
       serviceAccountName: {{ include "api-gateway.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
+        fsGroup: 10001
+        runAsUser: 10001
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -57,11 +58,19 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
             - name: config
               mountPath: /app/config
               readOnly: true
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
           emptyDir: {}
         - name: config
           configMap:

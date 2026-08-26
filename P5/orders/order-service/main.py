@@ -5,7 +5,9 @@ from strawberry.fastapi import GraphQLRouter
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import httpx
-
+import nats
+import asyncio
+import json
 app = FastAPI(title="Orders Service")
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -112,12 +114,23 @@ class Mutation:
         conn.commit()
         conn.close()
 
-        # 3. Llamar al servicio de notificaciones
-        notif_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8080")
+        # 3. Llamar al servicio de notificaciones asíncronamente con NATS
+        nats_url = os.getenv("NATS_URL", "nats://sa-platform-nats:4222")
+        
+        async def publish_event():
+            try:
+                nc = await nats.connect(nats_url)
+                await nc.publish("orders.created", json.dumps({"event": "ORDER_CREATED", "order_id": order_id}).encode())
+                await nc.close()
+            except Exception as e:
+                print("No se pudo enviar la notificación a NATS:", e)
+        
+        # Como estamos en una función síncrona, usamos asyncio para ejecutar
         try:
-            httpx.post(f"{notif_url}/api/notifications", json={"event": "ORDER_CREATED", "order_id": order_id})
-        except Exception as e:
-            print("No se pudo enviar la notificación:", e)
+            loop = asyncio.get_running_loop()
+            loop.create_task(publish_event())
+        except RuntimeError:
+            asyncio.run(publish_event())
 
         return Order(id=order_id, user_id=user_id, total=total, status="PENDING", created_at=str(created_at))
 
@@ -128,3 +141,7 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get("/health")
 def health():
     return {"status": "Orders Service is running"}
+
+@app.get("/")
+def read_root():
+    return {"status": "OK"}
