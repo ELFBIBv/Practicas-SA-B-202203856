@@ -6,6 +6,6 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
     && chown -R appuser:appgroup /etc/nginx/conf.d \
     && touch /var/run/nginx.pid \
     && chown -R appuser:appgroup /var/run/nginx.pid
-USER appuser
+USER 10001
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

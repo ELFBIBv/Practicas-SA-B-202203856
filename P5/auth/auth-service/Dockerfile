@@ -15,6 +15,6 @@ COPY --from=builder --chown=appuser:appgroup /app/package.json /app/pnpm-lock.ya
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
 
-USER appuser
+USER 10001
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

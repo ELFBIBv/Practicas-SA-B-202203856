@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:alpine AS builder
 WORKDIR /app
 ENV CGO_ENABLED=0
 COPY . .
@@ -9,6 +9,6 @@ FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/main .
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
+USER 10001
 EXPOSE 8080
 CMD ["./main"]
