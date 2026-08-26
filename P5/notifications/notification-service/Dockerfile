@@ -1,17 +1,14 @@
-FROM golang:1.21-alpine
+FROM golang:1.21-alpine AS builder
 WORKDIR /app
-
-# Desactivamos CGO para obtener un binario estático que corra perfecto en alpine
 ENV CGO_ENABLED=0
-
 COPY . .
-
-# Inicializamos el módulo de Go localmente en caso de que no exista
 RUN go mod init notification-service || true
-
-# Compilamos la aplicación
 RUN go build -o main .
 
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/main .
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 EXPOSE 8080
-
 CMD ["./main"]
