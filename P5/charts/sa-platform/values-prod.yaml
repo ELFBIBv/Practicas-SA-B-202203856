@@ -1,6 +1,10 @@
 global:
   environment: prod
 
+serviceAccount:
+  create: true
+  name: ""
+
 mysql:
   primary:
     persistence:

@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron1
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjobs.schedule1 | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "sa-platform.labels" . | nindent 12 }}
+        spec:
+          serviceAccountName: {{ include "sa-platform.serviceAccountName" . }}
+          securityContext:
+            runAsNonRoot: true
+          restartPolicy: OnFailure
+          containers:
+          - name: cron1
+            image: "cron1:latest"
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+            env:
+              - name: DB_HOST
+                value: {{ include "sa-platform.fullname" . }}-mysql
+              - name: DB_USER
+                value: {{ .Values.mysql.auth.username }}
+              - name: DB_NAME
+                value: {{ .Values.mysql.auth.database }}
+            envFrom:
+              - secretRef:
+                  name: {{ include "sa-platform.fullname" . }}-mysql
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron2
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjobs.schedule2 | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "sa-platform.labels" . | nindent 12 }}
+        spec:
+          serviceAccountName: {{ include "sa-platform.serviceAccountName" . }}
+          securityContext:
+            runAsNonRoot: true
+          restartPolicy: OnFailure
+          containers:
+          - name: cron2
+            image: "cron2:latest"
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+            env:
+              - name: DB_HOST
+                value: {{ include "sa-platform.fullname" . }}-mysql
+              - name: DB_USER
+                value: {{ .Values.mysql.auth.username }}
+              - name: DB_NAME
+                value: {{ .Values.mysql.auth.database }}
+              - name: NATS_URL
+                value: "nats://{{ include "sa-platform.fullname" . }}-nats:4222"
+            envFrom:
+              - secretRef:
+                  name: {{ include "sa-platform.fullname" . }}-mysql
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
