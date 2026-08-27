@@ -2,8 +2,7 @@ import os
 import strawberry
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import mysql.connector
 import httpx
 import nats
 import asyncio
@@ -17,9 +16,8 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 DB_NAME = os.getenv("DB_NAME", "orders_db")
 
 def get_db():
-    return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME,
-        cursor_factory=RealDictCursor
+    return mysql.connector.connect(
+        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
     )
 
 @strawberry.type
@@ -43,7 +41,7 @@ class Query:
     @strawberry.field
     def orders(self) -> list[Order]:
         conn = get_db()
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM orders")
         rows = cur.fetchall()
         conn.close()
@@ -99,13 +97,15 @@ class Mutation:
 
         # 3. Guardar orden en base de datos
         conn = get_db()
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         total = quantity * official_unit_price
         
         # 4. Insertar orden
-        cur.execute("INSERT INTO orders (user_id, total, status) VALUES (%s, %s, %s) RETURNING id, created_at", (user_id, total, "PENDING"))
+        cur.execute("INSERT INTO orders (user_id, total, status) VALUES (%s, %s, %s)", (user_id, total, "PENDING"))
+        order_id = cur.lastrowid
+        
+        cur.execute("SELECT created_at FROM orders WHERE id = %s", (order_id,))
         order_record = cur.fetchone()
-        order_id = order_record['id']
         created_at = order_record['created_at']
         
         # 5. Insertar detalle de orden

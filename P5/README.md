@@ -51,11 +51,7 @@ eval $(minikube docker-env)
 Una vez que el entorno de docker apunta a minikube, debes compilar las imágenes de los microservicios:
 
 ```bash
-docker build -t api-gateway:latest ./api-gateway
-docker build -t auth:latest ./auth/auth-service
-docker build -t catalog:latest ./catalog/catalog-service
-docker build -t orders:latest ./orders/order-service
-docker build -t notifications:latest ./notifications/notification-service
+docker compose build
 ```
 
 ## 7. Desplegar el proyecto (Deploy)
@@ -123,4 +119,14 @@ minikube stop
 Si deseas borrar el clúster por completo y empezar desde cero:
 ```bash
 minikube delete
+```
+
+Borrar todos los pods
+```bash
+kubectl delete pods --all -n sa-p5
+```
+
+realizar un port-forward
+```bash
+kubectl port-forward service/sa-platform-api-gateway 8080:80 -n sa-p5
 ```

@@ -39,14 +39,15 @@ app.post('/register', async (req, res) => {
         
         const query = `
             INSERT INTO users (carnet, nombres_encrypted, apellidos_encrypted, correo_encrypted, password_hash, rol)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, carnet, rol;
+            VALUES (?, ?, ?, ?, ?, ?);
         `;
         const values = [carnet, nombresEncrypted, apellidosEncrypted, correoEncrypted, passwordHash, rol];
         
-        const result = await pool.query(query, values);
-        res.status(201).json({ message: "User registered successfully", user: result.rows[0] });
+        const [result] = await pool.query<any>(query, values);
+        
+        res.status(201).json({ message: "User registered successfully", user: { id: result.insertId, carnet, rol } });
     } catch (error: any) {
-        if (error.code === '23505') {
+        if (error.code === 'ER_DUP_ENTRY') {
             res.status(409).json({ message: "Carnet already registered" });
             return;
         }
@@ -62,15 +63,15 @@ app.post('/login', async (req, res) => {
             return;
         }
         
-        const query = `SELECT * FROM users WHERE carnet = $1`;
-        const result = await pool.query(query, [carnet]);
+        const query = `SELECT * FROM users WHERE carnet = ?`;
+        const [result] = await pool.query<any[]>(query, [carnet]);
         
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
             res.status(401).json({ message: "Invalid credentials" });
             return;
         }
         
-        const user = result.rows[0];
+        const user = result[0];
         const useAES = process.env.USE_AES_FOR_PASSWORD === 'true';
         
         let isValid = false;

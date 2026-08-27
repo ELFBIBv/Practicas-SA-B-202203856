@@ -1,8 +1,8 @@
-replicaCount: 2
+replicaCount: 1
 image:
   repository: auth
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "v2"
 serviceAccount:
   create: true
   name: ""

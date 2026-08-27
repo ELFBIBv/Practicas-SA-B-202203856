@@ -34,6 +34,15 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            - name: DB_HOST
+              value: "{{ .Release.Name }}-mysql"
+            - name: DB_USER
+              value: "user"
+            - name: DB_PASSWORD
+              value: "password123"
+            - name: DB_NAME
+              value: "auth_db"
           livenessProbe:
             httpGet:
               path: /

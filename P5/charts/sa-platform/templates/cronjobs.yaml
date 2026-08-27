@@ -30,14 +30,10 @@ spec:
               readOnlyRootFilesystem: true
             env:
               - name: DB_HOST
-                value: {{ include "sa-platform.fullname" . }}-mysql
-              - name: DB_USER
-                value: {{ .Values.mysql.auth.username }}
-              - name: DB_NAME
-                value: {{ .Values.mysql.auth.database }}
+                value: {{ .Release.Name }}-mysql
             envFrom:
               - secretRef:
-                  name: {{ include "sa-platform.fullname" . }}-mysql
+                  name: {{ .Release.Name }}-mysql
             volumeMounts:
               - name: tmp
                 mountPath: /tmp
@@ -77,16 +73,12 @@ spec:
               readOnlyRootFilesystem: true
             env:
               - name: DB_HOST
-                value: {{ include "sa-platform.fullname" . }}-mysql
-              - name: DB_USER
-                value: {{ .Values.mysql.auth.username }}
-              - name: DB_NAME
-                value: {{ .Values.mysql.auth.database }}
+                value: {{ .Release.Name }}-mysql
               - name: NATS_URL
                 value: "nats://{{ include "sa-platform.fullname" . }}-nats:4222"
             envFrom:
               - secretRef:
-                  name: {{ include "sa-platform.fullname" . }}-mysql
+                  name: {{ .Release.Name }}-mysql
             volumeMounts:
               - name: tmp
                 mountPath: /tmp

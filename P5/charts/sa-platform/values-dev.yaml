@@ -8,7 +8,7 @@ serviceAccount:
   name: ""
 
 mysql:
-  enabled: false
+  enabled: true
 
 nats:
   config:
@@ -42,7 +42,7 @@ apiGateway:
       memory: 128Mi
 
 authService:
-  replicaCount: 2
+  replicaCount: 1
   resources:
     limits:
       cpu: 200m
@@ -56,7 +56,7 @@ catalogService:
       memory: 256Mi
 
 orderService:
-  replicaCount: 2
+  replicaCount: 1
   resources:
     limits:
       cpu: 200m
@@ -68,3 +68,4 @@ notificationService:
     limits:
       cpu: 100m
       memory: 128Mi
+
