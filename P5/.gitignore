@@ -1,0 +1,19 @@
+# Helm dependencies
+charts/sa-platform/charts/*.tgz
+charts/sa-platform/charts/nats/
+charts/sa-platform/charts/redis/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out

@@ -1,0 +1,20 @@
+replicaCount: 1
+image:
+  repository: orders
+  pullPolicy: IfNotPresent
+  tag: "latest"
+serviceAccount:
+  create: true
+  name: ""
+service:
+  type: ClusterIP
+  port: 8001
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+global:
+  environment: dev

@@ -1,0 +1,260 @@
+{
+  "info": {
+    "name": "P4 Microservices (E-commerce)",
+    "description": "Collection generada a partir de los archivos .http de prueba",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth Service",
+      "item": [
+        {
+          "name": "1. Registrar un Nuevo Usuario (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"carnet\": \"202203856\",\n    \"nombres\": \"Alvaro\",\n    \"apellidos\": \"Guzman\",\n    \"correo\": \"alvaro@test.com\",\n    \"password\": \"mypassword\",\n    \"rol\": \"Admin\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "auth", "register" ]
+            }
+          }
+        },
+        {
+          "name": "2. Iniciar Sesión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"authToken\", jsonData.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"carnet\": \"202203856\",\n    \"password\": \"mypassword\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "auth", "login" ]
+            }
+          }
+        },
+        {
+          "name": "3. Validar Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/validate",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "auth", "validate" ]
+            }
+          }
+        },
+        {
+          "name": "4. Healthcheck",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/health",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "auth", "health" ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog Service",
+      "item": [
+        {
+          "name": "1. Crear un Producto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if(jsonData.data && jsonData.data.createProduct) {",
+                  "    pm.environment.set(\"productId\", jsonData.data.createProduct.product.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation {\n  createProduct(\n    name: \"Laptop Gamer\",\n    description: \"Laptop de alto rendimiento\",\n    price: 1500.00,\n    stock: 10\n  ) {\n    product {\n      id\n      name\n      price\n      stock\n    }\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/graphql",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "catalog", "graphql" ]
+            }
+          }
+        },
+        {
+          "name": "2. Listar Productos",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query {\n  products {\n    id\n    name\n    description\n    price\n    stock\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/graphql",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "catalog", "graphql" ]
+            }
+          }
+        },
+        {
+          "name": "3. Consultar Producto Específico",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query {\n  product(id: \"{{productId}}\") {\n    id\n    name\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/graphql",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "catalog", "graphql" ]
+            }
+          }
+        },
+        {
+          "name": "4. Healthcheck",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/catalog/health",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "catalog", "health" ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders Service",
+      "item": [
+        {
+          "name": "1. Crear un Pedido",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation {\n  createOrder(\n    userId: 1,\n    productId: \"{{productId}}\",\n    quantity: 2\n  ) {\n    id\n    total\n    status\n    createdAt\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/graphql",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "orders", "graphql" ]
+            }
+          }
+        },
+        {
+          "name": "2. Listar Pedidos",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query {\n  orders {\n    id\n    userId\n    total\n    status\n    createdAt\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/graphql",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "orders", "graphql" ]
+            }
+          }
+        },
+        {
+          "name": "3. Healthcheck",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/health",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "orders", "health" ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:80"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    }
+  ]
+}
