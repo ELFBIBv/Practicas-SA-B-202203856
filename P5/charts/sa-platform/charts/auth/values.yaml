@@ -2,7 +2,7 @@ replicaCount: 1
 image:
   repository: auth
   pullPolicy: IfNotPresent
-  tag: "v2"
+  tag: "latest"
 serviceAccount:
   create: true
   name: ""
