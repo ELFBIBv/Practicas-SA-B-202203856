@@ -1,0 +1,12 @@
+dependencies:
+- name: mysql
+  repository: file://./charts/mysql
+  version: 0.1.0
+- name: nats
+  repository: https://nats-io.github.io/k8s/helm/charts/
+  version: 2.14.5
+- name: mongodb
+  repository: file://./charts/mongodb
+  version: 0.1.0
+digest: sha256:1620e27fd219e9cde5edc5c5b8febc5ef62a747c23ec2bbd371d43f271fb1f6a
+generated: "2026-08-27T03:05:45.092908324-06:00"
