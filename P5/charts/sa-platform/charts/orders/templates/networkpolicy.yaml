@@ -27,3 +27,6 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: nats
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: catalog

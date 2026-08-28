@@ -37,12 +37,16 @@ spec:
           env:
             - name: DB_HOST
               value: "{{ .Release.Name }}-mysql"
+            - name: DB_PORT
+              value: "3306"
             - name: DB_USER
               value: "user"
             - name: DB_PASSWORD
               value: "password123"
             - name: DB_NAME
               value: "orders_db"
+            - name: CATALOG_SERVICE_URL
+              value: "http://{{ .Release.Name }}-catalog:8000/graphql"
           livenessProbe:
             httpGet:
               path: /

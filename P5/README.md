@@ -104,29 +104,59 @@ minikube service sa-platform-api-gateway -n sa-p5
 ```
 *(Esto te abrirá un túnel y te asignará una IP local con puerto para hacer tus pruebas en Postman o en el navegador)*
 
-## 10. Apagar y Limpiar (Stop & Clean)
+## 10. Cheat Sheet de Kubernetes y Helm
 
-Para desinstalar toda la arquitectura sin borrar el clúster:
+Aquí tienes algunos comandos útiles para administrar tu entorno en Minikube, aplicar cambios y solucionar problemas comunes.
+
+### Aplicar cambios en Helm (Actualizar despliegue)
+Si modificas archivos en la carpeta `charts/`, usa este comando para que Helm empaquete los cambios y los aplique al clúster (eliminando versiones cacheadas):
+```bash
+rm -f charts/sa-platform/charts/*.tgz && helm dependency update charts/sa-platform/ && helm upgrade sa-platform charts/sa-platform/ -n sa-p5
+```
+
+### Construir imágenes de Docker directamente en Minikube
+Si editas el código fuente de un microservicio y necesitas construir la imagen para que Minikube la detecte (sin usar `docker compose` ni registros externos):
+```bash
+# 1. Conectar tu terminal al Docker interno de Minikube
+eval $(minikube docker-env)
+
+# 2. Construir la imagen localmente (Ejemplo con Orders)
+cd orders/order-service && docker build -t orders:latest .
+
+# 3. Reiniciar los pods para que tomen la nueva imagen
+kubectl rollout restart deployment sa-platform-orders -n sa-p5
+```
+
+### Reiniciar Pods (Rollout)
+Para forzar a que los pods de un despliegue se reinicien de forma ordenada (mucho mejor y más seguro que borrarlos manualmente con `kubectl delete pods`):
+```bash
+kubectl rollout restart deployment sa-platform-orders -n sa-p5
+```
+
+### Port-Forwarding (Acceder a un servicio localmente)
+Si prefieres usar `localhost` en lugar de la IP asignada por Minikube:
+```bash
+kubectl port-forward service/sa-platform-api-gateway 8080:80 -n sa-p5
+```
+
+### Ver Logs y Depurar
+Ver los logs de los pods de un servicio en tiempo real para ver errores (como hicimos con Orders):
+```bash
+kubectl logs deployment/sa-platform-orders -n sa-p5 -f
+```
+
+### Apagar y Limpiar (Stop & Clean)
+Desinstalar el release de Helm:
 ```bash
 helm uninstall sa-platform -n sa-p5
 ```
 
-Para apagar el nodo de minikube (conservando los datos para la próxima vez que lo inicies):
+Apagar el clúster conservando los datos:
 ```bash
 minikube stop
 ```
 
-Si deseas borrar el clúster por completo y empezar desde cero:
+Borrar el clúster por completo:
 ```bash
 minikube delete
-```
-
-Borrar todos los pods
-```bash
-kubectl delete pods --all -n sa-p5
-```
-
-realizar un port-forward
-```bash
-kubectl port-forward service/sa-platform-api-gateway 8080:80 -n sa-p5
 ```

@@ -36,7 +36,7 @@ spec:
               protocol: TCP
           env:
             - name: MONGO_URI
-              value: "mongodb://root:mongo123@sa-platform-mongodb:27017/catalog_db?authSource=admin"
+              value: "mongodb://root:mongo123@sa-platform-mongodb-mongodb:27017/catalog_db?authSource=admin"
           livenessProbe:
             httpGet:
               path: /
