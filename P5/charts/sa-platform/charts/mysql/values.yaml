@@ -1,0 +1,18 @@
+image:
+  repository: mysql
+  pullPolicy: IfNotPresent
+  tag: "8.0"
+
+auth:
+  username: user
+  password: password123
+  database: sa_p5
+  rootPassword: rootpassword
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
