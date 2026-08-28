@@ -6,10 +6,10 @@ import { check, sleep } from 'k6';
 // el HPA (Horizontal Pod Autoscaler) escala automáticamente los pods.
 export let options = {
     stages: [
-        { duration: '30s', target: 20 }, // Rampa de subida a 20 usuarios virtuales (VUs)
-        { duration: '1m', target: 50 },  // Rampa de subida a 50 VUs (aquí debería dispararse el HPA)
-        { duration: '30s', target: 100 }, // Rampa a 100 VUs para máximo estrés
-        { duration: '1m', target: 100 },  // Mantener carga máxima por 1 minuto
+        { duration: '30s', target: 50 }, // Rampa de subida a 50 usuarios virtuales (VUs)
+        { duration: '1m', target: 150 },  // Rampa de subida a 150 VUs (aquí debería dispararse el HPA)
+        { duration: '30s', target: 300 }, // Rampa a 300 VUs para máximo estrés
+        { duration: '1m', target: 300 },  // Mantener carga máxima por 1 minuto
         { duration: '30s', target: 0 },   // Rampa de bajada a 0
     ],
     thresholds: {
@@ -21,11 +21,10 @@ export let options = {
 export default function () {
     // Reemplaza localhost con la IP de tu Ingress de Minikube (minikube ip) o dominio configurado.
     // k6 run -e TARGET_URL=http://tu-ip scripts/load_test.js
-    let targetURL = __ENV.TARGET_URL || 'http://localhost'; 
+    let targetURL = __ENV.TARGET_URL || 'http://localhost:8080'; 
 
-    // Aquí enviamos una carga al catálogo como ejemplo síncrono. 
-    // También se podría cargar el /graphql de orders para estresar el productor de NATS.
-    let query = `
+    // --- 1. Catálogo ---
+    let catalogQuery = `
       query {
         products {
           id
@@ -34,24 +33,40 @@ export default function () {
         }
       }
     `;
-
-    let payload = JSON.stringify({
-      query: query,
-    });
-
     let params = {
       headers: {
         'Content-Type': 'application/json',
       },
     };
+    let resCatalog = http.post(`${targetURL}/api/catalog/graphql`, JSON.stringify({ query: catalogQuery }), params);
 
-    let res = http.post(`${targetURL}/graphql`, payload, params);
+    // --- 2. Órdenes ---
+    let ordersQuery = `
+      query {
+        orders {
+          id
+          total
+          status
+        }
+      }
+    `;
+    let resOrders = http.post(`${targetURL}/api/orders/graphql`, JSON.stringify({ query: ordersQuery }), params);
 
-    check(res, {
-        'status es 200': (r) => r.status === 200,
-        'tiempo de respuesta < 2000ms': (r) => r.timings.duration < 2000,
+    // --- 3. Autenticación ---
+    // Hacemos una petición de login para estresar la base de datos y la función de cifrado de contraseñas
+    let resAuth = http.post(`${targetURL}/api/auth/login`, JSON.stringify({ carnet: "k6-load-test", password: "fake" }), params);
+
+    // Validamos los resultados
+    check(resCatalog, {
+        'Catálogo status es 200': (r) => r.status === 200,
+    });
+    check(resOrders, {
+        'Órdenes status es 200': (r) => r.status === 200,
+    });
+    check(resAuth, {
+        'Auth status es procesado (401 o 200)': (r) => r.status === 200 || r.status === 401,
     });
 
     // Un pequeño sleep para simular el comportamiento de un usuario real
-    sleep(1);
+    sleep(0.1);
 }
