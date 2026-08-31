@@ -28,15 +28,21 @@ spec:
           ports:
             - containerPort: 27017
               name: mongodb
+          startupProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
           readinessProbe:
             tcpSocket:
               port: 27017
-            initialDelaySeconds: 15
+            initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             tcpSocket:
               port: 27017
-            initialDelaySeconds: 15
+            initialDelaySeconds: 10
             periodSeconds: 10
           resources:
             requests:
