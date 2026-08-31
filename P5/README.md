@@ -40,7 +40,7 @@ Inicia Minikube y configura tu terminal para apuntar al entorno Docker de Miniku
 
 ```bash
 # Iniciar minikube
-minikube start
+minikube start --cpus=4 --memory=6144m
 
 # Apuntar el entorno de docker local hacia minikube
 eval $(minikube docker-env)
