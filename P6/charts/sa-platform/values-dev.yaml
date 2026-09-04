@@ -1,0 +1,71 @@
+global:
+  environment: dev
+  security:
+    allowInsecureImages: true
+
+serviceAccount:
+  create: true
+  name: ""
+
+mysql:
+  enabled: true
+
+nats:
+  config:
+    jetstream:
+      enabled: true
+  container:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  reloader:
+    merge:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+  natsBox:
+    enabled: false
+
+apiGateway:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+authService:
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+catalogService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+orderService:
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+notificationService:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
