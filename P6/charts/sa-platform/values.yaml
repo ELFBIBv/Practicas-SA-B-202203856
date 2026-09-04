@@ -93,3 +93,4 @@ notificationService:
 cronjobs:
   schedule1: "*/2 * * * *"
   schedule2: "*/10 * * * *"
+
