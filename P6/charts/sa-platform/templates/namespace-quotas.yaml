@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-quota
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-limits
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  limits:
+  - default:
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container

@@ -1,0 +1,10 @@
+# Archivo de ejemplo sin credenciales reales
+global:
+  environment: example
+
+mysql:
+  auth:
+    database: "sa_p5"
+    username: "example_user"
+    password: "example_password"
+    rootPassword: "example_root_password"
