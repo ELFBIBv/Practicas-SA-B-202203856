@@ -16,24 +16,33 @@ spec:
         metadata:
           labels:
             {{- include "sa-platform.labels" . | nindent 12 }}
+            app.kubernetes.io/component: cron1
         spec:
-          serviceAccountName: {{ include "sa-platform.serviceAccountName" . }}
+          serviceAccountName: {{ include "sa-platform.fullname" . }}-cron1
+          automountServiceAccountToken: false
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           securityContext:
             runAsNonRoot: true
           restartPolicy: OnFailure
           containers:
           - name: cron1
-            image: "cron1:latest"
-            imagePullPolicy: IfNotPresent
+            image: "{{ .Values.cronjobs.cron1.image.repository }}:{{ .Values.cronjobs.cron1.image.tag }}"
+            imagePullPolicy: {{ .Values.cronjobs.cron1.image.pullPolicy }}
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-            env:
-              - name: DB_HOST
-                value: {{ .Release.Name }}-mysql
+              capabilities:
+                drop: ["ALL"]
             envFrom:
+              - configMapRef:
+                  name: {{ include "sa-platform.fullname" . }}-cron1
               - secretRef:
-                  name: {{ .Release.Name }}-mysql
+                  name: {{ default (printf "%s-mysql" .Release.Name) .Values.global.mysqlSecretName | quote }}
+            resources:
+              {{- toYaml .Values.cronjobs.cron1.resources | nindent 14 }}
             volumeMounts:
               - name: tmp
                 mountPath: /tmp
@@ -59,26 +68,35 @@ spec:
         metadata:
           labels:
             {{- include "sa-platform.labels" . | nindent 12 }}
+            app.kubernetes.io/component: cron2
         spec:
-          serviceAccountName: {{ include "sa-platform.serviceAccountName" . }}
+          serviceAccountName: {{ include "sa-platform.fullname" . }}-cron2
+          automountServiceAccountToken: false
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           securityContext:
             runAsNonRoot: true
           restartPolicy: OnFailure
           containers:
           - name: cron2
-            image: "cron2:latest"
-            imagePullPolicy: IfNotPresent
+            image: "{{ .Values.cronjobs.cron2.image.repository }}:{{ .Values.cronjobs.cron2.image.tag }}"
+            imagePullPolicy: {{ .Values.cronjobs.cron2.image.pullPolicy }}
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-            env:
-              - name: DB_HOST
-                value: {{ .Release.Name }}-mysql
-              - name: NATS_URL
-                value: "nats://{{ include "sa-platform.fullname" . }}-nats:4222"
+              capabilities:
+                drop: ["ALL"]
             envFrom:
+              - configMapRef:
+                  name: {{ include "sa-platform.fullname" . }}-cron2
               - secretRef:
-                  name: {{ .Release.Name }}-mysql
+                  name: {{ default (printf "%s-mysql" .Release.Name) .Values.global.mysqlSecretName | quote }}
+              - secretRef:
+                  name: {{ .Values.global.natsAuthSecretName }}
+            resources:
+              {{- toYaml .Values.cronjobs.cron2.resources | nindent 14 }}
             volumeMounts:
               - name: tmp
                 mountPath: /tmp

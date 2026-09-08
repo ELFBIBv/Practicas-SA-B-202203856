@@ -5,4 +5,14 @@ metadata:
   labels:
     {{- include "auth.labels" . | nindent 4 }}
 data:
-  APP_ENV: "{{ .Values.global.environment }}"
+  APP_ENV: {{ .Values.global.environment | quote }}
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  PORT: {{ .Values.service.port | quote }}
+  LOG_LEVEL: {{ .Values.global.logLevel | quote }}
+  DB_HOST: {{ printf "%s-mysql" .Release.Name | quote }}
+  DB_PORT: "3306"
+  DB_USER: {{ .Values.config.databaseUser | quote }}
+  DB_NAME: {{ .Values.config.databaseName | quote }}
+  JWT_EXPIRES_IN: {{ .Values.config.jwtExpiresIn | quote }}
+  JWT_GRACE_PERIOD_SEC: {{ .Values.config.jwtGracePeriodSeconds | quote }}
+  USE_AES_FOR_PASSWORD: {{ .Values.config.useAesForPassword | quote }}

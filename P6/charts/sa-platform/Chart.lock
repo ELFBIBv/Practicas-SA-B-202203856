@@ -1,4 +1,19 @@
 dependencies:
+- name: api-gateway
+  repository: file://./charts/api-gateway
+  version: 0.1.0
+- name: auth
+  repository: file://./charts/auth
+  version: 0.1.0
+- name: catalog
+  repository: file://./charts/catalog
+  version: 0.1.0
+- name: orders
+  repository: file://./charts/orders
+  version: 0.1.0
+- name: notifications
+  repository: file://./charts/notifications
+  version: 0.1.0
 - name: mysql
   repository: file://./charts/mysql
   version: 0.1.0
@@ -8,5 +23,5 @@ dependencies:
 - name: mongodb
   repository: file://./charts/mongodb
   version: 0.1.0
-digest: sha256:1620e27fd219e9cde5edc5c5b8febc5ef62a747c23ec2bbd371d43f271fb1f6a
-generated: "2026-08-27T03:05:45.092908324-06:00"
+digest: sha256:7c2f08e51a84ec7ed345640e103feabe7009f6b7a41dacd4853e0ccf0bff96ef
+generated: "2026-09-04T10:14:26.30106379-06:00"

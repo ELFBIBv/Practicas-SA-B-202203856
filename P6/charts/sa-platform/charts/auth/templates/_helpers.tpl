@@ -24,3 +24,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "auth.serviceAccountName" -}}
 {{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
+
+{{- define "auth.secretName" -}}
+{{- default (printf "%s-auth-secrets" .Release.Name) .Values.secrets.existingSecret -}}
+{{- end }}

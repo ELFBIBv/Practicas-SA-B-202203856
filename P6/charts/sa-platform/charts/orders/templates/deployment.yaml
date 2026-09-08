@@ -10,6 +10,7 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "orders.selectorLabels" . | nindent 6 }}
@@ -21,6 +22,11 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "orders.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
       containers:
@@ -34,19 +40,20 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "orders.fullname" . }}-config
           env:
-            - name: DB_HOST
-              value: "{{ .Release.Name }}-mysql"
-            - name: DB_PORT
-              value: "3306"
-            - name: DB_USER
-              value: "user"
             - name: DB_PASSWORD
-              value: "password123"
-            - name: DB_NAME
-              value: "orders_db"
-            - name: CATALOG_SERVICE_URL
-              value: "http://{{ .Release.Name }}-catalog:8000/graphql"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-mysql" .Release.Name) .Values.global.mysqlSecretName | quote }}
+                  key: DB_PASSWORD
+            - name: NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.natsAuthSecretName }}
+                  key: NATS_URL
           livenessProbe:
             httpGet:
               path: /
@@ -70,12 +77,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: config
-              mountPath: /app/config
-              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: config
-          configMap:
-            name: {{ include "orders.fullname" . }}-config
