@@ -1,0 +1,23 @@
+replicaCount: 2
+image:
+  repository: notifications
+  pullPolicy: IfNotPresent
+  tag: "latest"
+serviceAccount:
+  create: true
+  name: ""
+service:
+  type: ClusterIP
+  port: 8080
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+global:
+  environment: dev
+  logLevel: info
+  imagePullSecrets: []
+  natsAuthSecretName: sa-platform-nats-auth

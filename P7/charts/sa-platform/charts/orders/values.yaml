@@ -1,0 +1,26 @@
+replicaCount: 1
+image:
+  repository: orders
+  pullPolicy: IfNotPresent
+  tag: "latest"
+serviceAccount:
+  create: true
+  name: ""
+service:
+  type: ClusterIP
+  port: 8001
+config:
+  databaseUser: user
+  databaseName: orders_db
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+global:
+  environment: dev
+  logLevel: info
+  imagePullSecrets: []
+  natsAuthSecretName: sa-platform-nats-auth

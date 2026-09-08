@@ -1,0 +1,171 @@
+global:
+  environment: prod
+  storageClass: "managed-csi"
+  imagePullSecrets:
+    - name: ghcr-secret
+  logLevel: info
+  mysqlSecretName: ""
+  mongodbSecretName: ""
+  natsAuthSecretName: sa-platform-nats-auth
+
+mysql:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 2Gi
+  auth:
+    database: "sa_p5"
+    username: "user"
+    existingSecret: ""
+
+mongodb:
+  enabled: true
+  auth:
+    database: "catalog_db"
+    username: "root"
+    existingSecret: ""
+  persistence:
+    enabled: true
+    size: 2Gi
+
+nats:
+  enabled: true
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          enabled: true
+          size: 2Gi
+          storageClassName: "managed-csi"
+    merge:
+      authorization:
+        token: << $NATS_TOKEN >>
+  container:
+    env:
+      NATS_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: sa-platform-nats-auth
+            key: token
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  reloader:
+    merge:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+  natsBox:
+    enabled: false
+
+api-gateway:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-api-gateway
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 80
+  ingress:
+    enabled: false
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+auth:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-auth-service
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    nodeEnv: production
+    databaseUser: user
+    databaseName: auth_db
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+catalog:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-catalog-service
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+orders:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-order-service
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    databaseUser: user
+    databaseName: orders_db
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notifications:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-notification-service
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+cronjobs:
+  schedule1: "*/2 * * * *"
+  schedule2: "*/10 * * * *"
+  cron1:
+    image:
+      repository: ghcr.io/elfbibv/sa-cron1
+      tag: "v1.0.0"
+      pullPolicy: IfNotPresent
+  cron2:
+    image:
+      repository: ghcr.io/elfbibv/sa-cron2
+      tag: "v1.0.0"
+      pullPolicy: IfNotPresent
+
+quota:
+  requestsCpu: "3"
+  requestsMemory: 4Gi
+  limitsCpu: "6"
+  limitsMemory: 8Gi
