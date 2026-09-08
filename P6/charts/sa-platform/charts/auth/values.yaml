@@ -9,6 +9,15 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 4000
+config:
+  nodeEnv: development
+  databaseUser: user
+  databaseName: auth_db
+  jwtExpiresIn: 1h
+  jwtGracePeriodSeconds: "300"
+  useAesForPassword: "false"
+secrets:
+  existingSecret: ""
 resources:
   limits:
     cpu: 200m
@@ -18,3 +27,5 @@ resources:
     memory: 128Mi
 global:
   environment: dev
+  logLevel: info
+  imagePullSecrets: []

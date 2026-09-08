@@ -5,6 +5,8 @@ metadata:
   labels:
     app: mysql
 spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
   ports:
     - port: 3306
       targetPort: 3306

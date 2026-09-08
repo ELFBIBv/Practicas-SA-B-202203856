@@ -1,47 +1,56 @@
 global:
   environment: prod
-
-serviceAccount:
-  create: true
-  name: ""
+  logLevel: warn
 
 mysql:
-  primary:
-    persistence:
-      size: 5Gi
+  persistence:
+    size: 5Gi
 
-apiGateway:
+mongodb:
+  persistence:
+    size: 5Gi
+
+api-gateway:
   replicaCount: 3
+  image:
+    tag: "v1.0.0"
   resources:
     limits:
       cpu: 200m
       memory: 256Mi
 
-authService:
+auth:
   replicaCount: 3
+  image:
+    tag: "v1.0.0"
   resources:
     limits:
       cpu: 500m
       memory: 512Mi
 
-catalogService:
+catalog:
   replicaCount: 3
+  image:
+    tag: "v1.0.0"
   resources:
     limits:
       cpu: 500m
       memory: 512Mi
 
-orderService:
+orders:
   replicaCount: 3
+  image:
+    tag: "v1.0.0"
   resources:
     limits:
       cpu: 500m
       memory: 512Mi
 
-notificationService:
+notifications:
   replicaCount: 3
+  image:
+    tag: "v1.0.0"
   resources:
     limits:
       cpu: 200m
       memory: 256Mi
-

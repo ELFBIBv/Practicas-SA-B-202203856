@@ -5,14 +5,17 @@ image:
 
 auth:
   username: user
-  password: password123
   database: sa_p5
-  rootPassword: rootpassword
+  existingSecret: ""
 
 resources:
   requests:
-    cpu: 100m
+    cpu: 50m
     memory: 256Mi
   limits:
     cpu: 500m
     memory: 768Mi
+
+persistence:
+  enabled: true
+  size: 2Gi

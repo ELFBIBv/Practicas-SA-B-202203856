@@ -10,6 +10,7 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "catalog.selectorLabels" . | nindent 6 }}
@@ -21,6 +22,11 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ include "catalog.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
       containers:
@@ -34,9 +40,15 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "catalog.fullname" . }}-config
           env:
             - name: MONGO_URI
-              value: "mongodb://root:mongo123@sa-platform-mongodb-mongodb:27017/catalog_db?authSource=admin"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-mongodb" .Release.Name) .Values.global.mongodbSecretName | quote }}
+                  key: MONGO_URI
           livenessProbe:
             httpGet:
               path: /
@@ -60,12 +72,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: config
-              mountPath: /app/config
-              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: config
-          configMap:
-            name: {{ include "catalog.fullname" . }}-config

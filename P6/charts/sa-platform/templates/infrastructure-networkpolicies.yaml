@@ -1,0 +1,125 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-mysql-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: auth
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: orders
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: cron1
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: cron2
+      ports:
+        - {protocol: TCP, port: 3306}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-mongodb-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: catalog
+      ports:
+        - {protocol: TCP, port: 27017}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-nats-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: orders
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifications
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: cron2
+      ports:
+        - {protocol: TCP, port: 4222}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron1-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: cron1
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - {protocol: TCP, port: 3306}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron2-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: cron2
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - {protocol: TCP, port: 3306}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - {protocol: TCP, port: 4222}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}

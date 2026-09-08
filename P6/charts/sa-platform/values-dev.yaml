@@ -1,11 +1,9 @@
 global:
   environment: dev
+  storageClass: standard
+  logLevel: debug
   security:
     allowInsecureImages: true
-
-serviceAccount:
-  create: true
-  name: ""
 
 mysql:
   enabled: true
@@ -34,38 +32,47 @@ nats:
   natsBox:
     enabled: false
 
-apiGateway:
+api-gateway:
   replicaCount: 2
+  image:
+    tag: "latest"
   resources:
     limits:
       cpu: 100m
       memory: 128Mi
 
-authService:
-  replicaCount: 1
-  resources:
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-catalogService:
+auth:
   replicaCount: 2
+  image:
+    tag: "latest"
   resources:
     limits:
       cpu: 200m
       memory: 256Mi
 
-orderService:
-  replicaCount: 1
-  resources:
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-notificationService:
+catalog:
   replicaCount: 2
+  image:
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+orders:
+  replicaCount: 2
+  image:
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+notifications:
+  replicaCount: 2
+  image:
+    tag: "latest"
   resources:
     limits:
       cpu: 100m
       memory: 128Mi
-

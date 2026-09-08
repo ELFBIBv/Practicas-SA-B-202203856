@@ -1,10 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: {{ include "sa-platform.fullname" . }}-mongodb
+  name: {{ include "mongodb.fullname" . }}
   labels:
     app: mongodb
 spec:
+  serviceName: {{ include "mongodb.fullname" . }}
   replicas: 1
   selector:
     matchLabels:
@@ -14,17 +15,30 @@ spec:
       labels:
         app: mongodb
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 999
       containers:
         - name: mongodb
-          image: "mongo:6.0"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["--bind_ip_all"]
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
-              value: "root"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongodb.secretName" . }}
+                  key: mongodb-root-username
             - name: MONGO_INITDB_ROOT_PASSWORD
-              value: "mongo123"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongodb.secretName" . }}
+                  key: mongodb-root-password
             - name: MONGO_INITDB_DATABASE
-              value: "catalog_db"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongodb.secretName" . }}
+                  key: mongodb-database
           ports:
             - containerPort: 27017
               name: mongodb
@@ -38,10 +52,21 @@ spec:
               port: 27017
             initialDelaySeconds: 15
             periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 27017
+            failureThreshold: 30
+            periodSeconds: 5
           resources:
-            requests:
-              cpu: 50m
-              memory: 256Mi
-            limits:
-              cpu: 200m
-              memory: 512Mi
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: "{{ include "mongodb.fullname" . }}-data"
+      {{- end }}

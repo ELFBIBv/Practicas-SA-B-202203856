@@ -41,6 +41,9 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 env: {{ required "A valid global.environment is required!" .Values.global.environment }}
+{{- range $key, $value := .Values.global.commonLabels }}
+{{ $key }}: {{ $value | quote }}
+{{- end }}
 {{- end }}
 
 {{/*

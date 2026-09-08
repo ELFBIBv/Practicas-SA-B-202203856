@@ -9,6 +9,14 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 80
+ingress:
+  enabled: true
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 resources:
   limits:
     cpu: 200m
@@ -18,3 +26,5 @@ resources:
     memory: 128Mi
 global:
   environment: dev
+  logLevel: info
+  imagePullSecrets: []

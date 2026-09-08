@@ -5,4 +5,5 @@ metadata:
   labels:
     {{- include "api-gateway.labels" . | nindent 4 }}
 data:
-  APP_ENV: "{{ .Values.global.environment }}"
+  APP_ENV: {{ .Values.global.environment | quote }}
+  LOG_LEVEL: {{ .Values.global.logLevel | quote }}

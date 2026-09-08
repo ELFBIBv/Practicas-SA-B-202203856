@@ -18,3 +18,5 @@ resources:
     memory: 128Mi
 global:
   environment: dev
+  logLevel: info
+  imagePullSecrets: []
