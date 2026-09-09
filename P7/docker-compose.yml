@@ -1,0 +1,28 @@
+services:
+  api-gateway:
+    build: ./api-gateway
+    image: api-gateway:latest
+
+  auth-service:
+    build: ./auth/auth-service
+    image: auth:latest
+
+  catalog-service:
+    build: ./catalog/catalog-service
+    image: catalog:latest
+
+  order-service:
+    build: ./orders/order-service
+    image: orders:latest
+
+  notification-service:
+    build: ./notifications/notification-service
+    image: notifications:latest
+
+  cron1:
+    build: ./cronjobs/cron1
+    image: cron1:latest
+
+  cron2:
+    build: ./cronjobs/cron2
+    image: cron2:latest

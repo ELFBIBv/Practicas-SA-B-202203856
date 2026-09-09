@@ -1,0 +1,391 @@
+name: CI/CD - Plataforma de Microservicios (Practica 7)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Ejecutar el despliegue a AKS (requiere secrets de Azure configurados)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: elfbibv
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Etapa 1: build + test. Un job por servicio para que cada stack
+  # (Node, Python, Go) use exactamente sus propias dependencias e
+  # imagen base de pruebas, y para que un fallo puntual sea fácil de leer
+  # en la pestaña Actions.
+  # ---------------------------------------------------------------------
+
+  test-auth-service:
+    name: "Test: auth-service (Node/TypeScript)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/auth/auth-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: P7/auth/auth-service/pnpm-lock.yaml
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (compilar TypeScript)
+        run: pnpm run build
+
+      - name: Ejecutar pruebas unitarias
+        run: pnpm run test
+
+  test-catalog-service:
+    name: "Test: catalog-service (Python + MongoDB real)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/catalog/catalog-service
+    services:
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: P7/catalog/catalog-service/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+        env:
+          MONGO_URI: "mongodb://localhost:27017/catalog_db_test"
+
+  test-order-service:
+    name: "Test: order-service (Python + MySQL real)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/orders/order-service
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: orders_db_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: P7/orders/order-service/requirements-dev.txt
+
+      - name: Aplicar el esquema de orders al MySQL de la CI
+        run: mysql -h127.0.0.1 -uroot -proot orders_db_test < orders-db/init.sql
+        working-directory: P7/orders
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+        env:
+          DB_HOST: "127.0.0.1"
+          DB_PORT: "3306"
+          DB_USER: "root"
+          DB_PASSWORD: "root"
+          DB_NAME: "orders_db_test"
+
+  test-notification-service:
+    name: "Test: notification-service (Go)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/notifications/notification-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: P7/notifications/notification-service/go.mod
+          cache-dependency-path: P7/notifications/notification-service/go.sum
+
+      - name: Vet (análisis estático)
+        run: go vet ./...
+
+      - name: Ejecutar pruebas
+        run: go test ./... -v
+
+  test-cron1:
+    name: "Test: cron1 (Python + MySQL real)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/cronjobs/cron1
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cron_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: P7/cronjobs/cron1/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+        env:
+          DB_HOST: "127.0.0.1"
+          DB_USER: "root"
+          DB_PASSWORD: "root"
+          DB_NAME: "cron_test"
+
+  test-cron2:
+    name: "Test: cron2 (Python + MySQL real + NATS simulado)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: P7/cronjobs/cron2
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cron_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: P7/cronjobs/cron2/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Ejecutar pruebas
+        run: pytest -v
+        env:
+          DB_HOST: "127.0.0.1"
+          DB_USER: "root"
+          DB_PASSWORD: "root"
+          DB_NAME: "cron_test"
+
+  # ---------------------------------------------------------------------
+  # Etapa 2 y 3: dockerización + push al registry (GHCR). Corre solo si
+  # las 6 suites de pruebas anteriores pasaron. En un pull_request solo
+  # construye las imágenes (push: false) para validar los Dockerfile sin
+  # publicar nada.
+  # ---------------------------------------------------------------------
+  build-and-push:
+    name: "Build & Push: ${{ matrix.name }}"
+    needs:
+      - test-auth-service
+      - test-catalog-service
+      - test-order-service
+      - test-notification-service
+      - test-cron1
+      - test-cron2
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api-gateway
+            context: P7/api-gateway
+            image: sa-api-gateway
+          - name: auth-service
+            context: P7/auth/auth-service
+            image: sa-auth-service
+          - name: catalog-service
+            context: P7/catalog/catalog-service
+            image: sa-catalog-service
+          - name: order-service
+            context: P7/orders/order-service
+            image: sa-order-service
+          - name: notification-service
+            context: P7/notifications/notification-service
+            image: sa-notification-service
+          - name: cron1
+            context: P7/cronjobs/cron1
+            image: sa-cron1
+          - name: cron2
+            context: P7/cronjobs/cron2
+            image: sa-cron2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login en GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Calcular tags y etiquetas de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build y push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # ---------------------------------------------------------------------
+  # Etapa 4: despliegue a AKS con Helm. NO se dispara con un push normal:
+  # solo corre si se lanza manualmente el workflow (workflow_dispatch) con
+  # el checkbox "deploy" activado, y solo llega a hacer algo si además
+  # existen los secrets/vars de Azure descritos en P7/README.md. Mientras
+  # esas condiciones no se cumplan, este job queda configurado pero
+  # inactivo, tal como se pidió para no gastar créditos de Azure.
+  # ---------------------------------------------------------------------
+  deploy-to-aks:
+    name: "Deploy a AKS (manual)"
+    needs: build-and-push
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: production-aks
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AKS_CLUSTER: ${{ vars.AZURE_AKS_CLUSTER }}
+      NAMESPACE: sa-p5
+      RELEASE: sa-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login en Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Obtener credenciales del cluster AKS
+        run: |
+          az aks get-credentials \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$AKS_CLUSTER" \
+            --overwrite-existing
+
+      - uses: azure/setup-helm@v4
+
+      - name: Actualizar dependencias del chart
+        run: helm dependency update P7/charts/sa-platform
+
+      - name: Asegurar namespace e imagePullSecret de GHCR
+        run: |
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret \
+            --namespace "$NAMESPACE" \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.repository_owner }}" \
+            --docker-password="${{ secrets.GHCR_PAT }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Desplegar con Helm
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          helm upgrade --install "$RELEASE" P7/charts/sa-platform \
+            --namespace "$NAMESPACE" \
+            --create-namespace \
+            --values P7/charts/sa-platform/values-azure.yaml \
+            --set api-gateway.image.tag="$SHORT_SHA" \
+            --set auth.image.tag="$SHORT_SHA" \
+            --set catalog.image.tag="$SHORT_SHA" \
+            --set orders.image.tag="$SHORT_SHA" \
+            --set notifications.image.tag="$SHORT_SHA" \
+            --set cronjobs.cron1.image.tag="$SHORT_SHA" \
+            --set cronjobs.cron2.image.tag="$SHORT_SHA" \
+            --wait --timeout 10m
+
+      - name: Verificar despliegue
+        run: |
+          kubectl get pods -n "$NAMESPACE"
+          kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
