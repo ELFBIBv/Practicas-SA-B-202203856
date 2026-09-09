@@ -85,18 +85,41 @@ No se necesita nada para probar Build + Test + Push a GHCR salvo, posiblemente, 
 
 Para el despliegue (cuando decidas crear un clúster nuevo), hay que agregar los secrets y variables listados en la sección "Permisos y secrets necesarios" de `P7/README.md`. Ninguno de esos existe todavía, así que el job de deploy, si se dispara, fallará de forma controlada en el login de Azure (no hace nada destructivo).
 
-## 7. Qué NO se hizo (a propósito)
+## 7. Errores reales encontrados al ejecutar en GitHub (y cómo se diagnosticaron)
 
-- No se ejecutó el workflow en GitHub todavía (no se hizo push de esta rama).
+Validar en local con Docker (sección 4) le dio mucha confianza al pipeline, pero no es 100% idéntico al runner de GitHub Actions. Al hacer el primer push aparecieron dos problemas reales, cada uno con su propia causa:
+
+### 7.1 `pnpm install` fallaba con "packages field missing or empty"
+
+El job `test-auth-service` fallaba en el paso "Instalar dependencias". La causa: el workflow tenía fijada la versión `9` de pnpm (`pnpm/action-setup@v4` con `version: 9`), y esa versión valida de forma estricta el archivo `pnpm-workspace.yaml` que ya traía `auth-service` (copiado de P5), exigiendo un campo `packages:` que ese archivo no tiene (solo tiene `allowBuilds`, usado para aprobar la compilación nativa de `bcrypt`).
+
+**Cómo se confirmó antes de tocar nada:** se reprodujo el error exacto en esta misma máquina fijando pnpm a la versión 9 (`corepack use pnpm@9`), y luego se confirmó que con `pnpm@12.3.4` el mismo `pnpm install --frozen-lockfile` corre sin problema, con el mismo `pnpm-workspace.yaml` intacto. Esto demostró que el archivo estaba bien y el problema era la versión fijada en el workflow.
+
+**Fix:** cambiar `version: 9` por `version: 12.3.4` en el step `pnpm/action-setup@v4` de `auth-service`. Se verificó con `gh run list` / `gh run view` que, tras este cambio, los 6 jobs de prueba (incluido `auth-service`) pasaron en GitHub.
+
+### 7.2 El push a GHCR fallaba con "denied: permission_denied: read_package"
+
+Con las pruebas ya en verde, los 7 jobs de `build-and-push` construían la imagen correctamente pero fallaban al hacer push, con este error para las 7 imágenes por igual.
+
+**Causa:** los paquetes `ghcr.io/elfbibv/sa-*` ya existían desde antes (se publicaron manualmente durante P5/P6, con un token personal, no desde un workflow de Actions). Cuando un paquete de GHCR se crea así, **no** queda conectado automáticamente al repositorio; el `GITHUB_TOKEN` de un workflow de ese repo no tiene permiso de escritura sobre él hasta que se conecta a mano. Si los paquetes no hubieran existido antes (por ejemplo, en un proyecto nuevo), el primer push del workflow los habría creado y vinculado automáticamente, sin este paso extra.
+
+**Fix (manual, en GitHub, una sola vez por paquete):** en `https://github.com/users/ELFBIBv/packages/container/<paquete>/settings` → sección **"Manage Actions access"** → **Add Repository** → agregar `Practicas-SA-B-202203856` con rol **Write**. Se repite para los 7 paquetes.
+
+**Lección general:** un pipeline "que se ve bien" en el YAML no garantiza que corra bien la primera vez contra servicios reales (un registry externo, permisos de una cuenta, etc.). Por eso conviene usar `gh run list` y `gh run view --json jobs` (o la pestaña Actions) para ver el resultado real de cada job, en vez de asumir que un fix ya alcanzó con solo leerlo.
+
+## 8. Qué NO se hizo (a propósito)
+
 - No se creó ningún recurso en Azure.
-- No se crearon secrets ni variables en el repositorio.
+- No se crearon los secrets de Azure (`AZURE_CREDENTIALS`, `GHCR_PAT`) ni las variables del clúster.
 - No se tocó `P5/` ni `P6/` (quedaron intactas como entregas de esas prácticas).
+- No se disparó el job de deploy (`deploy-to-aks`): sigue apagado hasta que exista un clúster nuevo.
 
-## 8. Próximos pasos sugeridos (en orden)
+## 9. Próximos pasos sugeridos (en orden)
 
-1. Revisar el diff de esta rama (`git diff`) para entender exactamente qué se agregó.
-2. Hacer commit y push de `feature/Practica7`.
-3. Ir a la pestaña **Actions** del repositorio en GitHub y ver correr los 6 jobs de prueba y el job de build+push en vivo.
-4. Si algo falla, leer el log de ese job puntual (cada uno es independiente) antes de tocar nada más.
-5. Cuando el pipeline esté en verde, tomar la captura de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarla a `P7/README.md`.
-6. Cuando quieras probar el despliegue real, crear un clúster de AKS nuevo (siguiendo el procedimiento ya documentado en `P6/README.md`), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true`.
+1. ✅ Hacer commit y push de `feature/Practica7` — hecho.
+2. ✅ Corregir el error de `pnpm` (sección 7.1) — hecho.
+3. ✅ Aplicar el fix de permisos de GHCR (sección 7.2) en los 7 paquetes — hecho.
+4. ✅ Confirmar que los 6 jobs de prueba y los 7 de `build-and-push` quedaran en verde — confirmado.
+5. Tomar la captura de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarla a `P7/README.md`.
+![alt text](image.png)
+6. Crear el clúster de AKS nuevo siguiendo el procedimiento ya documentado en `P7/README.md` (sección "Procedimiento para crear el clúster de AKS de esta práctica", con nombres `rg-practica7`/`aks-sa-p7` para no confundirlo con el de P6, que ya fue eliminado), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true`. **En curso.**

@@ -6,11 +6,11 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 
 | Etapa | Estado | Detalle |
 | --- | --- | --- |
-| Build + Test | **Configurado y probado en local** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Validado localmente con Docker antes de confiar en la CI (ver [`pasos_hechos.md`](pasos_hechos.md)). |
-| Dockerización + Push a GHCR | **Configurado, listo para ejecutarse** | Construye las 7 imágenes y las publica en `ghcr.io/elfbibv/*` usando el `GITHUB_TOKEN` (no requiere secrets nuevos). |
-| Despliegue a AKS | **Configurado pero apagado a propósito** | El clúster de la práctica 6 fue eliminado para no seguir consumiendo el crédito de Azure. El job existe y está listo, pero solo se activa manualmente (`workflow_dispatch`) y solo hace algo una vez que se agregan los secrets de Azure descritos abajo. |
+| Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde (ver [`pasos_hechos.md`](pasos_hechos.md)). |
+| Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores, una vez conectados los 7 paquetes al repositorio (ver sección de permisos más abajo). |
+| Despliegue a AKS | **En curso** | El clúster de la práctica 6 fue eliminado; se está creando uno nuevo (`rg-practica7` / `aks-sa-p7`) siguiendo el procedimiento de abajo, y luego se agregarán los secrets de Azure para activar el job manual. |
 
-Esto fue una decisión explícita: primero validar que el CI (build + test + dockerización) funciona de punta a punta usando **únicamente runners gratuitos de GitHub**, sin tocar Azure. El despliegue real a AKS se activa cuando se decida crear un clúster nuevo.
+Ya se validó que el CI (build + test + dockerización) funciona de punta a punta usando **únicamente runners gratuitos de GitHub**, sin tocar Azure. El siguiente paso es el despliegue real a AKS.
 
 ## Arquitectura del pipeline
 
@@ -89,7 +89,11 @@ Nunca se sobreescribe el tag `v1.0.0` que ya usan los `values-azure.yaml` de P6/
 1. El workflow ya declara `permissions: packages: write`, así que en la mayoría de los casos no hay que tocar nada. Si el job `build-and-push` falla con `403 Forbidden` al hacer push a GHCR, revisar:
    **Settings → Actions → General → Workflow permissions** → seleccionar **"Read and write permissions"**.
 2. No se necesita ninguna cuenta de DockerHub ni credenciales adicionales: el push a GHCR usa el `GITHUB_TOKEN` que GitHub genera automáticamente en cada ejecución.
-3. Los paquetes se crean como privados bajo `ghcr.io/elfbibv/*` (igual que en P6). La primera vez que un paquete se publica desde un workflow queda vinculado automáticamente al repositorio.
+3. **Paso obligatorio detectado en la primera ejecución real:** los 7 paquetes (`sa-api-gateway`, `sa-auth-service`, `sa-catalog-service`, `sa-order-service`, `sa-notification-service`, `sa-cron1`, `sa-cron2`) ya existían en GHCR desde P5/P6, publicados con un token personal en vez de por un workflow de Actions. GitHub **no** conecta automáticamente un paquete pre-existente al repositorio; hay que hacerlo a mano una sola vez por paquete:
+   - Ir a `https://github.com/users/ELFBIBv/packages/container/<nombre-del-paquete>/settings`.
+   - En **"Manage Actions access"** → **Add Repository** → buscar `Practicas-SA-B-202203856` → asignarle el rol **Write**.
+   - Repetir para los 7 paquetes.
+   - Si un paquete todavía no existe (se crea por primera vez desde este workflow), este paso no es necesario: queda vinculado automáticamente.
 
 ### Para activar el despliegue a AKS más adelante (NO configurar todavía)
 
@@ -104,6 +108,97 @@ Cuando se cree un clúster nuevo, agregar:
 | Environment | `production-aks` | Opcional pero recomendado: crear un *environment* en **Settings → Environments** con un "required reviewer" para que el job de deploy pida aprobación manual incluso si alguien dispara el workflow por error |
 
 Mientras estos secrets no existan, el job `deploy-to-aks` puede dispararse manualmente sin ningún riesgo: fallará de forma controlada en el paso de login de Azure porque no encontrará credenciales válidas.
+
+## Procedimiento para crear el clúster de AKS de esta práctica
+
+Mismo procedimiento que en `P6/README.md`, adaptado con nombres propios de P7 para no confundirlo con el clúster ya eliminado de la práctica anterior. **Cada paso de aquí en adelante genera costo real por hora en Azure hasta que el resource group se elimine.**
+
+### 1. Variables y sesión de Azure
+
+```bash
+export RESOURCE_GROUP="rg-practica7"
+export AKS_CLUSTER="aks-sa-p7"
+export LOCATION="chilecentral"
+export NAMESPACE="sa-p5"
+export RELEASE="sa-platform"
+
+az login
+az account set --subscription "Azure for Students"
+az vm list-usage --location "$LOCATION" --output table
+```
+
+Revisar la cuota antes de crear el clúster, igual que en P6.
+
+### 2. Crear el resource group y el clúster AKS
+
+```bash
+az group create --name "$RESOURCE_GROUP" --location "$LOCATION"
+
+az aks create \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER" \
+  --location "$LOCATION" \
+  --tier free \
+  --node-count 2 \
+  --node-vm-size Standard_DS2_v2 \
+  --network-plugin azure \
+  --network-plugin-mode overlay \
+  --network-dataplane cilium \
+  --generate-ssh-keys
+
+az aks get-credentials \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$AKS_CLUSTER" \
+  --overwrite-existing
+
+kubectl get nodes
+```
+
+### 3. Crear el Service Principal para el secret `AZURE_CREDENTIALS`
+
+```bash
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+az ad sp create-for-rbac \
+  --name "sa-p7-cicd" \
+  --role Contributor \
+  --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+  --sdk-auth
+```
+
+Esto imprime un JSON. Ese JSON completo (tal cual) es el valor del secret `AZURE_CREDENTIALS`.
+
+### 4. Generar el `GHCR_PAT`
+
+En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. Copiar el valor (solo se muestra una vez).
+
+### 5. Cargar los secrets y variables en el repositorio
+
+Por la interfaz (**Settings → Secrets and variables → Actions** del repositorio) o con `gh` CLI:
+
+```bash
+gh secret set AZURE_CREDENTIALS   # pega el JSON del paso 3 y Ctrl+D
+gh secret set GHCR_PAT            # pega el token del paso 4 y Ctrl+D
+
+gh variable set AZURE_RESOURCE_GROUP --body "rg-practica7"
+gh variable set AZURE_AKS_CLUSTER --body "aks-sa-p7"
+```
+
+Opcional pero recomendado: crear el *environment* `production-aks` en **Settings → Environments** con un "required reviewer".
+
+### 6. Disparar el despliegue
+
+**Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`.
+
+### 7. Verificar y, cuando termines, eliminar el clúster
+
+```bash
+kubectl get pods -n "$NAMESPACE"
+kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
+
+# Cuando ya no se necesite (para no seguir generando costo):
+az group delete --name "$RESOURCE_GROUP" --yes --no-wait
+```
 
 ## Cómo ejecutar cada etapa
 
