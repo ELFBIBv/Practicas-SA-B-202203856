@@ -6,11 +6,11 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 
 | Etapa | Estado | Detalle |
 | --- | --- | --- |
-| Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde (ver [`pasos_hechos.md`](pasos_hechos.md)). |
-| Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores, una vez conectados los 7 paquetes al repositorio (ver sección de permisos más abajo). |
-| Despliegue a AKS | **En curso** | El clúster de la práctica 6 fue eliminado; se está creando uno nuevo (`rg-practica7` / `aks-sa-p7`) siguiendo el procedimiento de abajo, y luego se agregarán los secrets de Azure para activar el job manual. |
+| Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica7`. |
+| Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
+| Despliegue a AKS | **Verificado** | Clúster `aks-sa-p7` (resource group `rg-practica7`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
 
-Ya se validó que el CI (build + test + dockerización) funciona de punta a punta usando **únicamente runners gratuitos de GitHub**, sin tocar Azure. El siguiente paso es el despliegue real a AKS.
+Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR y despliegue real a AKS.
 
 ## Arquitectura del pipeline
 
@@ -84,7 +84,7 @@ Nunca se sobreescribe el tag `v1.0.0` que ya usan los `values-azure.yaml` de P6/
 
 ## Permisos y secrets necesarios en GitHub
 
-### Para que Build + Test + Push a GHCR funcionen (ya se puede probar hoy)
+### Para que Build + Test + Push a GHCR funcionen
 
 1. El workflow ya declara `permissions: packages: write`, así que en la mayoría de los casos no hay que tocar nada. Si el job `build-and-push` falla con `403 Forbidden` al hacer push a GHCR, revisar:
    **Settings → Actions → General → Workflow permissions** → seleccionar **"Read and write permissions"**.
@@ -95,19 +95,19 @@ Nunca se sobreescribe el tag `v1.0.0` que ya usan los `values-azure.yaml` de P6/
    - Repetir para los 7 paquetes.
    - Si un paquete todavía no existe (se crea por primera vez desde este workflow), este paso no es necesario: queda vinculado automáticamente.
 
-### Para activar el despliegue a AKS más adelante (NO configurar todavía)
+### Para activar el despliegue a AKS
 
-Cuando se cree un clúster nuevo, agregar:
+Ya configurado y verificado en este repositorio:
 
 | Tipo | Nombre | Contenido |
 | --- | --- | --- |
 | Secret | `AZURE_CREDENTIALS` | JSON de un service principal con permisos sobre el resource group del clúster. Se genera con `az ad sp create-for-rbac --name sa-p7-cicd --role Contributor --scopes /subscriptions/<ID_SUSCRIPCION>/resourceGroups/<RESOURCE_GROUP> --sdk-auth` |
 | Secret | `GHCR_PAT` | Personal Access Token (classic) con el scope `read:packages`, usado para crear el `imagePullSecret` dentro del clúster. Se usa un PAT y no el `GITHUB_TOKEN` porque este último expira apenas termina el workflow, y el clúster necesita poder re-descargar las imágenes después |
-| Variable (repo) | `AZURE_RESOURCE_GROUP` | Nombre del resource group del nuevo clúster (ej. `rg-practica7`) |
-| Variable (repo) | `AZURE_AKS_CLUSTER` | Nombre del nuevo clúster AKS |
+| Variable (repo) | `AZURE_RESOURCE_GROUP` | `rg-practica7` |
+| Variable (repo) | `AZURE_AKS_CLUSTER` | `aks-sa-p7` |
 | Environment | `production-aks` | Opcional pero recomendado: crear un *environment* en **Settings → Environments** con un "required reviewer" para que el job de deploy pida aprobación manual incluso si alguien dispara el workflow por error |
 
-Mientras estos secrets no existan, el job `deploy-to-aks` puede dispararse manualmente sin ningún riesgo: fallará de forma controlada en el paso de login de Azure porque no encontrará credenciales válidas.
+Si se elimina el clúster y se necesita recrearlo con otro nombre, estos mismos secrets/variables deben actualizarse. Sin credenciales válidas, el job `deploy-to-aks` falla de forma controlada en el paso de login de Azure, sin riesgo.
 
 ## Procedimiento para crear el clúster de AKS de esta práctica
 
@@ -174,11 +174,16 @@ En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access 
 
 ### 5. Cargar los secrets y variables en el repositorio
 
-Por la interfaz (**Settings → Secrets and variables → Actions** del repositorio) o con `gh` CLI:
+Por la interfaz (**Settings → Secrets and variables → Actions** del repositorio) o con `gh` CLI. Para los dos secrets, la forma más simple es guardar el valor en un archivo temporal y redirigirlo (evita tener que "pegar y Ctrl+D" en la terminal):
 
 ```bash
-gh secret set AZURE_CREDENTIALS   # pega el JSON del paso 3 y Ctrl+D
-gh secret set GHCR_PAT            # pega el token del paso 4 y Ctrl+D
+# AZURE_CREDENTIALS: guarda el JSON del paso 3 en un archivo, súbelo, y bórralo
+nano azure-creds.json          # pega el JSON, guarda (Ctrl+O, Enter) y sal (Ctrl+X)
+gh secret set AZURE_CREDENTIALS < azure-creds.json
+rm azure-creds.json            # nunca debe quedar ni commitearse este archivo
+
+# GHCR_PAT: es una sola línea, se puede pasar directo
+echo "TU_TOKEN_AQUI" | gh secret set GHCR_PAT
 
 gh variable set AZURE_RESOURCE_GROUP --body "rg-practica7"
 gh variable set AZURE_AKS_CLUSTER --body "aks-sa-p7"
@@ -199,11 +204,10 @@ kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
 # Cuando ya no se necesite (para no seguir generando costo):
 az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 ```
-
 ## Cómo ejecutar cada etapa
 
-- **Probar Build + Test + Dockerización (recomendado ahora):** hacer push a esta rama o abrir un Pull Request. El workflow corre solo, no consume Azure y no requiere ninguna acción adicional.
-- **Activar el despliegue (cuando exista un clúster):** ir a la pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar.
+- **Build + Test + Dockerización:** se dispara solo con cualquier `push` o `pull_request`, sin acción adicional.
+- **Activar el despliegue:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
 
 ## Documentación técnica del flujo
 
@@ -215,7 +219,17 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 ## Evidencia de ejecución
 
-Pendiente: se agregará una captura de una ejecución exitosa de "Build + Test + Dockerización" en la pestaña **Actions** una vez que el workflow corra en GitHub (todavía no se ha hecho push de esta rama al remoto). El job de deploy quedará documentado con captura solo cuando exista un clúster de AKS nuevamente.
+**1. Ejecución completa del pipeline en verde** (6 jobs de test, 7 de `build-and-push`, y `Deploy a AKS` — run manual `#6`, disparado con `deploy=true` sobre `main`):
+
+![Pipeline completo en verde, incluyendo el deploy a AKS](docs/evidencia-ejecucion/pipeline-completo-en-verde.png)
+
+**2. Pods corriendo en el clúster AKS** (`kubectl get pods -n sa-p5`): los 5 microservicios con 2 réplicas cada uno, `mysql-0`/`mongodb-0`/`nats-0`, y los CronJobs ya ejecutados (`Completed`):
+
+![Salida de kubectl get pods mostrando todos los pods Running/Completed](docs/evidencia-ejecucion/kubectl-get-pods.png)
+
+**3. Servicio expuesto públicamente** (`kubectl get service sa-platform-api-gateway -n sa-p5`), con la IP externa asignada por el Load Balancer de Azure:
+
+![Salida de kubectl get service mostrando la IP externa del API Gateway](docs/evidencia-ejecucion/kubectl-get-service-ip-externa.png)
 
 ## Referencias
 
