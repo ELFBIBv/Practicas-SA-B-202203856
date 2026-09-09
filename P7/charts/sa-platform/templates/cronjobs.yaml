@@ -1,0 +1,105 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron1
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjobs.schedule1 | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "sa-platform.labels" . | nindent 12 }}
+            app.kubernetes.io/component: cron1
+        spec:
+          serviceAccountName: {{ include "sa-platform.fullname" . }}-cron1
+          automountServiceAccountToken: false
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+          restartPolicy: OnFailure
+          containers:
+          - name: cron1
+            image: "{{ .Values.cronjobs.cron1.image.repository }}:{{ .Values.cronjobs.cron1.image.tag }}"
+            imagePullPolicy: {{ .Values.cronjobs.cron1.image.pullPolicy }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            envFrom:
+              - configMapRef:
+                  name: {{ include "sa-platform.fullname" . }}-cron1
+              - secretRef:
+                  name: {{ default (printf "%s-mysql" .Release.Name) .Values.global.mysqlSecretName | quote }}
+            resources:
+              {{- toYaml .Values.cronjobs.cron1.resources | nindent 14 }}
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sa-platform.fullname" . }}-cron2
+  labels:
+    {{- include "sa-platform.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjobs.schedule2 | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "sa-platform.labels" . | nindent 12 }}
+            app.kubernetes.io/component: cron2
+        spec:
+          serviceAccountName: {{ include "sa-platform.fullname" . }}-cron2
+          automountServiceAccountToken: false
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+          restartPolicy: OnFailure
+          containers:
+          - name: cron2
+            image: "{{ .Values.cronjobs.cron2.image.repository }}:{{ .Values.cronjobs.cron2.image.tag }}"
+            imagePullPolicy: {{ .Values.cronjobs.cron2.image.pullPolicy }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            envFrom:
+              - configMapRef:
+                  name: {{ include "sa-platform.fullname" . }}-cron2
+              - secretRef:
+                  name: {{ default (printf "%s-mysql" .Release.Name) .Values.global.mysqlSecretName | quote }}
+              - secretRef:
+                  name: {{ .Values.global.natsAuthSecretName }}
+            resources:
+              {{- toYaml .Values.cronjobs.cron2.resources | nindent 14 }}
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

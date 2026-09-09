@@ -1,0 +1,30 @@
+replicaCount: 2
+image:
+  repository: api-gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+serviceAccount:
+  create: true
+  name: ""
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: true
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+global:
+  environment: dev
+  logLevel: info
+  imagePullSecrets: []
