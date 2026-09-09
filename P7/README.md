@@ -195,6 +195,8 @@ Opcional pero recomendado: crear el *environment* `production-aks` en **Settings
 
 **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`.
 
+> **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
+
 ### 7. Verificar y, cuando termines, eliminar el clúster
 
 ```bash
@@ -231,6 +233,10 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 ![Salida de kubectl get service mostrando la IP externa del API Gateway](docs/evidencia-ejecucion/kubectl-get-service-ip-externa.png)
 
+**4. Verificación independiente desde Azure Cloud Shell** (otra terminal, distinta a la máquina local usada en las capturas anteriores): `az aks get-credentials` + `kubectl get pods -n sa-p5` confirmando los mismos pods `Running`/`Completed`:
+
+![Verificación desde Azure Cloud Shell mostrando los mismos pods corriendo](docs/evidencia-ejecucion/cloud-shell-verificacion-pods.png)
+
 ## Referencias
 
 - [Documentación oficial de GitHub Actions](https://docs.github.com/actions)
@@ -238,3 +244,4 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 - [docker/build-push-action](https://github.com/docker/build-push-action)
 - [Service containers en GitHub Actions](https://docs.github.com/actions/using-containerized-services/about-service-containers)
 - [azure/login (GitHub Action)](https://github.com/Azure/login)
+

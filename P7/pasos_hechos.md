@@ -120,6 +120,5 @@ Con las pruebas ya en verde, los 7 jobs de `build-and-push` construían la image
 2. ✅ Corregir el error de `pnpm` (sección 7.1) — hecho.
 3. ✅ Aplicar el fix de permisos de GHCR (sección 7.2) en los 7 paquetes — hecho.
 4. ✅ Confirmar que los 6 jobs de prueba y los 7 de `build-and-push` quedaran en verde — confirmado.
-5. Tomar la captura de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarla a `P7/README.md`.
-![alt text](image.png)
-6. Crear el clúster de AKS nuevo siguiendo el procedimiento ya documentado en `P7/README.md` (sección "Procedimiento para crear el clúster de AKS de esta práctica", con nombres `rg-practica7`/`aks-sa-p7` para no confundirlo con el de P6, que ya fue eliminado), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true`. **En curso.**
+5. ✅ Tomar las capturas de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarlas a `P7/README.md` — hecho (incluye una verificación extra desde Azure Cloud Shell).
+6. ✅ Crear el clúster de AKS nuevo (`rg-practica7`/`aks-sa-p7`), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true` — hecho, deploy verificado con los 16 pods corriendo.
