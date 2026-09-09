@@ -1,0 +1,27 @@
+dependencies:
+- name: api-gateway
+  repository: file://./charts/api-gateway
+  version: 0.1.0
+- name: auth
+  repository: file://./charts/auth
+  version: 0.1.0
+- name: catalog
+  repository: file://./charts/catalog
+  version: 0.1.0
+- name: orders
+  repository: file://./charts/orders
+  version: 0.1.0
+- name: notifications
+  repository: file://./charts/notifications
+  version: 0.1.0
+- name: mysql
+  repository: file://./charts/mysql
+  version: 0.1.0
+- name: nats
+  repository: https://nats-io.github.io/k8s/helm/charts/
+  version: 2.14.5
+- name: mongodb
+  repository: file://./charts/mongodb
+  version: 0.1.0
+digest: sha256:7c2f08e51a84ec7ed345640e103feabe7009f6b7a41dacd4853e0ccf0bff96ef
+generated: "2026-09-04T10:14:26.30106379-06:00"
