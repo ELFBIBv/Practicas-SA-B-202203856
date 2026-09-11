@@ -8,7 +8,7 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | --- | --- | --- |
 | Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica7`. |
 | Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
-| Despliegue efímero en **kind** | **Automático, corre en cada push/PR** | El job `deploy-kind` crea un clúster real de Kubernetes (temporal) dentro del propio runner, sin ninguna nube ni credenciales, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
+| Despliegue efímero en **kind** | **Automático, corre después de cada push (no en PR)** | El job `deploy-kind` descarga las 7 imágenes recién publicadas en GHCR (las mismas que se acaban de subir, no una copia reconstruida aparte), crea un clúster real de Kubernetes (temporal) dentro del propio runner, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
 | Despliegue a AKS | **Verificado** | Clúster `aks-sa-p7` (resource group `rg-practica7`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
 
 Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR, despliegue efímero automático en kind, y despliegue real a AKS.
@@ -48,13 +48,15 @@ flowchart TD
         D -- No --> F[Push a ghcr.io/elfbibv/*\ntag = branch, sha, semver o latest]
     end
 
-    B1 & B2 & B3 & B4 & B5 & B6 --> K
+    F --> K
 
     subgraph "Etapa 4: Deploy efímero (automático, sin nube)"
-        K[Crear clúster kind en el runner]
-        K --> K1[Build local de las 7 imágenes\ny kind load docker-image]
-        K1 --> K2[helm upgrade --install\ncon values-kind.yaml]
-        K2 --> K3[Verificar pods\nclúster se destruye al terminar el job]
+        K{"¿Es pull_request?"}
+        K -- Sí --> K0[No corre: build-and-push\nno publicó nada que descargar]
+        K -- No --> K1[Descargar las 7 imágenes\nrecién publicadas en GHCR]
+        K1 --> K2[Crear clúster kind + kind load docker-image]
+        K2 --> K3[helm upgrade --install\ncon values-kind.yaml]
+        K3 --> K4[Verificar pods\nclúster se destruye al terminar el job]
     end
 
     F --> G
@@ -251,7 +253,8 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 ```
 ## Cómo ejecutar cada etapa
 
-- **Build + Test + Dockerización + Deploy efímero en kind:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
+- **Build + Test + Dockerización:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
+- **Deploy efímero en kind:** se dispara solo, automáticamente, después de cada `push` (no corre en Pull Requests, porque ahí no se publica ninguna imagen que descargar).
 - **Activar el despliegue real a AKS:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
 
 ## Documentación técnica del flujo
@@ -260,7 +263,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 2. **Build + Test:** valida que el código compila (TypeScript, Go) y que la lógica de negocio funciona contra una base de datos real, no contra mocks completos. Esto detecta errores de queries SQL, de esquemas de Mongo o de serialización que un mock no vería.
 3. **Dockerización:** una vez que las 6 pruebas pasan, se construyen las 7 imágenes (`docker/build-push-action` con caché de capas vía GitHub Actions cache) y se etiquetan según la rama/tag/commit.
 4. **Push a GHCR:** en cualquier evento que no sea un Pull Request, las imágenes se publican en `ghcr.io/elfbibv/*`, listas para ser referenciadas por un despliegue.
-5. **Deploy efímero en kind (automático):** en paralelo al build+push, el job `deploy-kind` construye las mismas 7 imágenes en local (sin publicarlas a ningún registry), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, carga ahí las imágenes con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). Esto prueba que el chart de Helm funciona de verdad, en cada cambio, sin depender de Azure ni de ningún secret.
+5. **Deploy efímero en kind (automático):** una vez que `build-and-push` publicó las 7 imágenes en GHCR (nunca antes: se sigue el principio "build once, deploy many"), el job `deploy-kind` descarga esas mismas imágenes con `docker pull` (usando el tag de sha corto del commit), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, las carga ahí con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). No corre en Pull Requests (ahí `build-and-push` no publica nada). Esto prueba que el chart de Helm funciona de verdad, con la imagen real que se acaba de publicar, sin depender de Azure ni de ningún secret adicional.
 6. **Deploy real a AKS (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
 
 ## Evidencia de ejecución

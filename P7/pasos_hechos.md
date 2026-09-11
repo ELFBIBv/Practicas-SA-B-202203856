@@ -131,7 +131,7 @@ Con el deploy a AKS ya funcionando, se agregó una etapa más al pipeline: un de
 
 **Corrección importante en el proceso:** el primer intento fue instalar `kind` y crear un clúster de prueba en la máquina local, para validar el enfoque antes de escribir el YAML — la misma disciplina de "probar antes de entregar" que se usó para las pruebas de Python/Node/Go. Pero eso no era lo que se pedía: la idea era que esta etapa corriera dentro de GitHub Actions, no en la computadora del estudiante. Se corrigió de inmediato: se eliminó el binario descargado (nunca se llegó a crear ningún clúster ni contenedor local) y el job se escribió y se valida directamente en el workflow de GitHub.
 
-**Cómo funciona el job `deploy-kind`:**
+**Cómo funciona el job `deploy-kind` (versión inicial):**
 
 1. Construye las 7 imágenes con `docker buildx build --load` (quedan solo en el Docker local del runner, no se publican a ningún registry).
 2. Crea el clúster con la acción `helm/kind-action`, que además instala `kubectl` y lo destruye automáticamente al terminar el job.
@@ -139,7 +139,21 @@ Con el deploy a AKS ya funcionando, se agregó una etapa más al pipeline: un de
 4. Instala el chart con `helm upgrade --install`, combinando `values.yaml` + `values-dev.yaml` (que ya traían configuración pensada para un entorno local: `storageClass: standard`, que además es exactamente el nombre de la StorageClass que trae `kind` por defecto) + un `values-kind.yaml` nuevo que baja las réplicas a 1 por servicio, para no saturar los recursos limitados del runner (2 vCPU / ~7GB RAM).
 5. Verifica con `kubectl get pods/pvc/svc/cronjobs`, y si algo falla, imprime `kubectl describe` y los logs de los contenedores para facilitar el diagnóstico.
 
-**Resultado:** ahora el pipeline tiene dos niveles de despliegue automatizado: uno **automático y gratuito** (kind, en cada push) que garantiza que el chart de Helm siempre es válido, y uno **manual y real** (AKS) para cuando se necesita demostrar el despliegue en la nube.
+**Resultado inicial:** el pipeline quedó con dos niveles de despliegue automatizado: uno **automático y gratuito** (kind) que garantiza que el chart de Helm siempre es válido, y uno **manual y real** (AKS) para cuando se necesita demostrar el despliegue en la nube.
+
+### 10.1 Corrección de diseño: "build once, deploy many"
+
+En la primera versión, `deploy-kind` corría **en paralelo** con `build-and-push` (ambos dependían solo de los 6 jobs de test), y construía sus propias 7 imágenes locales desde cero, sin relación con las que se publicaban en GHCR.
+
+**El problema, que se detectó al revisar el diagrama de una ejecución real en Actions:** eso significa que el código se estaba compilando **dos veces** — una vez para publicar en GHCR y otra, por separado, para probar en kind. Aunque el resultado debería ser idéntico (mismo código, mismo `Dockerfile`), no hay ninguna garantía real de que la imagen que se prueba sea la misma que se publica; viola un principio básico de CI/CD llamado **"build once, deploy many"** (construir el artefacto una sola vez y reutilizar exactamente ese mismo artefacto en todas las etapas siguientes, en vez de reconstruirlo).
+
+**Fix:** se cambió `deploy-kind` para que:
+
+- Dependa de `build-and-push` (`needs: build-and-push`) en vez de depender directamente de los 6 jobs de test — ahora corre *después*, no en paralelo.
+- Ya no construye nada: hace `docker login` a GHCR y **descarga con `docker pull`** las 7 imágenes que `build-and-push` acaba de publicar (usando el mismo tag de sha corto del commit), y las re-etiqueta a los nombres simples que espera el chart (`auth:latest`, `catalog:latest`, etc.) antes de cargarlas a kind.
+- Solo corre cuando el evento no es un Pull Request (`if: github.event_name != 'pull_request'`), porque en un PR `build-and-push` únicamente valida el `Dockerfile` sin publicar nada — no habría ninguna imagen que descargar.
+
+**Resultado final:** ahora sí se prueba en kind exactamente la misma imagen, bit por bit, que queda publicada en GHCR — no una reconstrucción aparte. El costo es que `deploy-kind` ya no corre en paralelo con `build-and-push` (tarda un poco más en total), pero la garantía que da es mucho más fuerte y honesta.
 
 **Error real al primer intento en GitHub Actions:** el paso "Preparar dependencias del chart" falló con:
 

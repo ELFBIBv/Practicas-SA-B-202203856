@@ -322,49 +322,46 @@ jobs:
 
   # ---------------------------------------------------------------------
   # Etapa 4: despliegue efímero en kind (Kubernetes in Docker). Corre
-  # automáticamente en cada push/PR, sin ninguna nube ni credenciales:
-  # crea un clúster de Kubernetes real (aunque temporal) dentro del propio
-  # runner, construye las 7 imágenes en local, las carga directo al
-  # clúster (sin pasar por ningún registry) y aplica el mismo chart de
-  # Helm que se usaría en producción. El clúster se destruye solo al
-  # terminar el job. Esto valida que el chart y los manifiestos de
-  # Kubernetes funcionan de verdad en cada cambio, sin gastar nada.
+  # automáticamente después de build-and-push (nunca antes: sigue el
+  # principio "build once, deploy many" — se prueba exactamente la misma
+  # imagen que ya se publicó en GHCR, no una reconstruida aparte). Crea un
+  # clúster de Kubernetes real (aunque temporal) dentro del propio runner,
+  # descarga ahí las 7 imágenes recién publicadas, las carga al clúster y
+  # aplica el mismo chart de Helm que se usaría en producción. El clúster
+  # se destruye solo al terminar el job. No corre en Pull Requests porque
+  # ahí `build-and-push` no publica ninguna imagen (solo la valida).
   # ---------------------------------------------------------------------
   deploy-kind:
     name: "Despliegue K8s efímero (kind)"
-    needs:
-      - test-auth-service
-      - test-catalog-service
-      - test-order-service
-      - test-notification-service
-      - test-cron1
-      - test-cron2
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Login en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build de las 7 imágenes en local (sin publicar a ningún registry)
+      - name: Descargar las 7 imágenes ya publicadas en GHCR
         run: |
-          declare -A CONTEXTS=(
-            [api-gateway]=P7/api-gateway
-            [auth]=P7/auth/auth-service
-            [catalog]=P7/catalog/catalog-service
-            [orders]=P7/orders/order-service
-            [notifications]=P7/notifications/notification-service
-            [cron1]=P7/cronjobs/cron1
-            [cron2]=P7/cronjobs/cron2
+          declare -A IMAGES=(
+            [api-gateway]=sa-api-gateway
+            [auth]=sa-auth-service
+            [catalog]=sa-catalog-service
+            [orders]=sa-order-service
+            [notifications]=sa-notification-service
+            [cron1]=sa-cron1
+            [cron2]=sa-cron2
           )
-          for name in "${!CONTEXTS[@]}"; do
-            echo "::group::Build $name"
-            docker buildx build \
-              --load \
-              --tag "${name}:latest" \
-              --cache-from "type=gha,scope=kind-${name}" \
-              --cache-to "type=gha,mode=max,scope=kind-${name}" \
-              "${CONTEXTS[$name]}"
-            echo "::endgroup::"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          for plain in "${!IMAGES[@]}"; do
+            ghcr_image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${IMAGES[$plain]}:${SHORT_SHA}"
+            docker pull "$ghcr_image"
+            docker tag "$ghcr_image" "${plain}:latest"
           done
 
       - name: Crear clúster local con kind
