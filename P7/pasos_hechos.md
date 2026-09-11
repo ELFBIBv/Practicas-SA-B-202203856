@@ -140,3 +140,13 @@ Con el deploy a AKS ya funcionando, se agregó una etapa más al pipeline: un de
 5. Verifica con `kubectl get pods/pvc/svc/cronjobs`, y si algo falla, imprime `kubectl describe` y los logs de los contenedores para facilitar el diagnóstico.
 
 **Resultado:** ahora el pipeline tiene dos niveles de despliegue automatizado: uno **automático y gratuito** (kind, en cada push) que garantiza que el chart de Helm siempre es válido, y uno **manual y real** (AKS) para cuando se necesita demostrar el despliegue en la nube.
+
+**Error real al primer intento en GitHub Actions:** el paso "Preparar dependencias del chart" falló con:
+
+```
+Error: no repository definition for https://nats-io.github.io/k8s/helm/charts/. Please add the missing repos via 'helm repo add'
+```
+
+**Causa:** el job usaba `helm dependency build`, que exige que el repositorio de Helm de cada dependencia externa (en este chart, solo `nats` viene de un repo remoto; el resto son subcharts locales) ya esté registrado de antemano con `helm repo add`. El job de `deploy-to-aks` nunca tuvo este problema porque usa `helm dependency update`, que sí resuelve la URL del repositorio al vuelo, sin necesitar ese registro previo.
+
+**Fix:** cambiar `helm dependency build` por `helm dependency update` en el job `deploy-kind`, para que quedara igual que en `deploy-to-aks` (que ya se sabía que funcionaba). Lección: al copiar un patrón de un job a otro, más vale usar exactamente el mismo comando que ya se probó, en vez de una variante "en teoría equivalente" sin probar.

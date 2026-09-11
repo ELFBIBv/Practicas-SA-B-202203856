@@ -66,6 +66,39 @@ flowchart TD
     end
 ```
 
+Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El siguiente muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez que cualquiera de los dos jobs de deploy (`deploy-kind` o `deploy-to-aks`) termina de aplicar el chart — es la misma topología en ambos casos, solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
+
+## Arquitectura de despliegue (qué corre dentro del clúster)
+
+```mermaid
+flowchart LR
+    subgraph Entrada
+        Internet((Internet / kind))
+    end
+
+    Internet --> GW[API Gateway\nClusterIP en kind\nLoadBalancer en AKS]
+
+    GW --> Auth[Auth]
+    GW --> Catalog[Catalog]
+    GW --> Orders[Orders]
+    GW --> Notifications[Notifications]
+
+    Auth -- "usa la BD auth_db" --> MySQL[(MySQL - 1 StatefulSet + PVC\nauth_db / orders_db / sa_p5)]
+    Orders -- "usa la BD orders_db" --> MySQL
+    Orders -- "HTTP: valida/descuenta stock" --> Catalog
+    Catalog --> Mongo[(MongoDB\nStatefulSet + PVC)]
+    Orders -- "publica ORDER_CREATED" --> NATS[(NATS JetStream\nStatefulSet + PVC)]
+    NATS -- "consume el evento" --> Notifications
+
+    Cron1[CronJob cron1\ncada 2 min] -- "usa la BD sa_p5" --> MySQL
+    Cron2[CronJob cron2\ncada 10 min] -- "usa la BD sa_p5" --> MySQL
+    Cron2 -- "publica orders.summary" --> NATS
+```
+
+Namespace `sa-p5` para ambos entornos. Los servicios internos (`Auth`, `Catalog`, `Orders`, `Notifications`, bases de datos) son siempre `ClusterIP`, solo accesibles dentro del clúster; únicamente el `API Gateway` se expone hacia afuera (en `kind` no hace falta exponerlo porque la verificación se hace con `kubectl`/`port-forward` dentro del mismo job; en AKS se expone con IP pública real vía `Service` tipo `LoadBalancer`, como se documentó en la evidencia de ejecución).
+
+**Sobre las 4 flechas hacia MySQL:** no es una base de datos compartida entre servicios. Es **un solo servidor MySQL** (un Pod, un PVC) que aloja **tres bases de datos separadas**: `auth_db` (usada solo por Auth), `orders_db` (usada solo por Orders) y `sa_p5` (usada por ambos CronJobs para su tabla `cron_logs`). Cada servicio tiene sus propias credenciales y su propio `DB_NAME`, definidos en su respectivo `ConfigMap` (`charts/auth/templates/configmap.yaml`, `charts/orders/templates/configmap.yaml`, `templates/cronjobs-configmaps.yaml`); solo comparten el motor de base de datos para ahorrar recursos, no las tablas.
+
 ## Servicios cubiertos y tipo de prueba
 
 | Servicio | Lenguaje | Cómo se prueba en CI | Dependencias reales usadas |
