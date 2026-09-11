@@ -321,7 +321,93 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   # ---------------------------------------------------------------------
-  # Etapa 4: despliegue a AKS con Helm. NO se dispara con un push normal:
+  # Etapa 4: despliegue efímero en kind (Kubernetes in Docker). Corre
+  # automáticamente en cada push/PR, sin ninguna nube ni credenciales:
+  # crea un clúster de Kubernetes real (aunque temporal) dentro del propio
+  # runner, construye las 7 imágenes en local, las carga directo al
+  # clúster (sin pasar por ningún registry) y aplica el mismo chart de
+  # Helm que se usaría en producción. El clúster se destruye solo al
+  # terminar el job. Esto valida que el chart y los manifiestos de
+  # Kubernetes funcionan de verdad en cada cambio, sin gastar nada.
+  # ---------------------------------------------------------------------
+  deploy-kind:
+    name: "Despliegue K8s efímero (kind)"
+    needs:
+      - test-auth-service
+      - test-catalog-service
+      - test-order-service
+      - test-notification-service
+      - test-cron1
+      - test-cron2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build de las 7 imágenes en local (sin publicar a ningún registry)
+        run: |
+          declare -A CONTEXTS=(
+            [api-gateway]=P7/api-gateway
+            [auth]=P7/auth/auth-service
+            [catalog]=P7/catalog/catalog-service
+            [orders]=P7/orders/order-service
+            [notifications]=P7/notifications/notification-service
+            [cron1]=P7/cronjobs/cron1
+            [cron2]=P7/cronjobs/cron2
+          )
+          for name in "${!CONTEXTS[@]}"; do
+            echo "::group::Build $name"
+            docker buildx build \
+              --load \
+              --tag "${name}:latest" \
+              --cache-from "type=gha,scope=kind-${name}" \
+              --cache-to "type=gha,mode=max,scope=kind-${name}" \
+              "${CONTEXTS[$name]}"
+            echo "::endgroup::"
+          done
+
+      - name: Crear clúster local con kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: p7-kind
+
+      - name: Cargar las imágenes al clúster de kind
+        run: |
+          for name in api-gateway auth catalog orders notifications cron1 cron2; do
+            kind load docker-image "${name}:latest" --name p7-kind
+          done
+
+      - uses: azure/setup-helm@v4
+
+      - name: Preparar dependencias del chart
+        run: helm dependency build P7/charts/sa-platform
+
+      - name: Desplegar el chart en el clúster efímero
+        run: |
+          helm upgrade --install sa-platform P7/charts/sa-platform \
+            --namespace sa-p5 \
+            --create-namespace \
+            --values P7/charts/sa-platform/values.yaml \
+            --values P7/charts/sa-platform/values-dev.yaml \
+            --values P7/charts/sa-platform/values-kind.yaml \
+            --wait --timeout 5m
+
+      - name: Verificar el despliegue
+        if: always()
+        run: |
+          kubectl get pods -n sa-p5 -o wide
+          kubectl get pvc,svc -n sa-p5
+          kubectl get cronjobs -n sa-p5
+
+      - name: Diagnóstico si algo falló
+        if: failure()
+        run: |
+          kubectl describe pods -n sa-p5
+          kubectl logs -n sa-p5 -l app.kubernetes.io/part-of=sa-platform --all-containers --tail=100 || true
+
+  # ---------------------------------------------------------------------
+  # Etapa 5: despliegue a AKS con Helm. NO se dispara con un push normal:
   # solo corre si se lanza manualmente el workflow (workflow_dispatch) con
   # el checkbox "deploy" activado, y solo llega a hacer algo si además
   # existen los secrets/vars de Azure descritos en P7/README.md. Mientras
