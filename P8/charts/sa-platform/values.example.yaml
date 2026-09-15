@@ -1,0 +1,40 @@
+# Ejemplo para Secrets creados fuera del chart. Los nombres son ficticios.
+global:
+  environment: example
+  mysqlSecretName: "example-mysql-credentials"
+  mongodbSecretName: "example-mongodb-credentials"
+  natsAuthSecretCreate: false
+  natsAuthSecretName: "example-nats-credentials"
+
+mysql:
+  auth:
+    database: "sa_p5"
+    username: "example_user"
+    existingSecret: "example-mysql-credentials"
+
+mongodb:
+  auth:
+    database: "catalog_db"
+    username: "example_mongo_user"
+    existingSecret: "example-mongodb-credentials"
+
+auth:
+  config:
+    databaseUser: "example_user"
+    databaseName: "auth_db"
+  secrets:
+    existingSecret: "example-auth-credentials"
+
+orders:
+  config:
+    databaseUser: "example_user"
+    databaseName: "orders_db"
+
+nats:
+  container:
+    env:
+      NATS_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: "example-nats-credentials"
+            key: token
