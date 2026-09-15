@@ -8,9 +8,10 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | --- | --- | --- |
 | Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica7`. |
 | Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
+| Despliegue efímero en **kind** | **Automático, corre después de cada push (no en PR)** | El job `deploy-kind` descarga las 7 imágenes recién publicadas en GHCR (las mismas que se acaban de subir, no una copia reconstruida aparte), crea un clúster real de Kubernetes (temporal) dentro del propio runner, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
 | Despliegue a AKS | **Verificado** | Clúster `aks-sa-p7` (resource group `rg-practica7`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
 
-Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR y despliegue real a AKS.
+Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR, despliegue efímero automático en kind, y despliegue real a AKS.
 
 ## Arquitectura del pipeline
 
@@ -47,14 +48,58 @@ flowchart TD
         D -- No --> F[Push a ghcr.io/elfbibv/*\ntag = branch, sha, semver o latest]
     end
 
+    F --> K
+
+    subgraph "Etapa 4: Deploy efímero (automático, sin nube)"
+        K{"¿Es pull_request?"}
+        K -- Sí --> K0[No corre: build-and-push\nno publicó nada que descargar]
+        K -- No --> K1[Descargar las 7 imágenes\nrecién publicadas en GHCR]
+        K1 --> K2[Crear clúster kind + kind load docker-image]
+        K2 --> K3[helm upgrade --install\ncon values-kind.yaml]
+        K3 --> K4[Verificar pods\nclúster se destruye al terminar el job]
+    end
+
     F --> G
 
-    subgraph "Etapa 4: Deploy (manual)"
+    subgraph "Etapa 5: Deploy a AKS (manual)"
         G{"¿workflow_dispatch\ncon deploy=true?"}
         G -- No --> H[No se ejecuta nada más]
         G -- Sí --> I[helm upgrade --install\nen AKS vía P7/charts/sa-platform]
     end
 ```
+
+Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El siguiente muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez que cualquiera de los dos jobs de deploy (`deploy-kind` o `deploy-to-aks`) termina de aplicar el chart — es la misma topología en ambos casos, solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
+
+## Arquitectura de despliegue (qué corre dentro del clúster)
+
+```mermaid
+flowchart LR
+    subgraph Entrada
+        Internet((Internet / kind))
+    end
+
+    Internet --> GW[API Gateway\nClusterIP en kind\nLoadBalancer en AKS]
+
+    GW --> Auth[Auth]
+    GW --> Catalog[Catalog]
+    GW --> Orders[Orders]
+    GW --> Notifications[Notifications]
+
+    Auth -- "usa la BD auth_db" --> MySQL[(MySQL - 1 StatefulSet + PVC\nauth_db / orders_db / sa_p5)]
+    Orders -- "usa la BD orders_db" --> MySQL
+    Orders -- "HTTP: valida/descuenta stock" --> Catalog
+    Catalog --> Mongo[(MongoDB\nStatefulSet + PVC)]
+    Orders -- "publica ORDER_CREATED" --> NATS[(NATS JetStream\nStatefulSet + PVC)]
+    NATS -- "consume el evento" --> Notifications
+
+    Cron1[CronJob cron1\ncada 2 min] -- "usa la BD sa_p5" --> MySQL
+    Cron2[CronJob cron2\ncada 10 min] -- "usa la BD sa_p5" --> MySQL
+    Cron2 -- "publica orders.summary" --> NATS
+```
+
+Namespace `sa-p5` para ambos entornos. Los servicios internos (`Auth`, `Catalog`, `Orders`, `Notifications`, bases de datos) son siempre `ClusterIP`, solo accesibles dentro del clúster; únicamente el `API Gateway` se expone hacia afuera (en `kind` no hace falta exponerlo porque la verificación se hace con `kubectl`/`port-forward` dentro del mismo job; en AKS se expone con IP pública real vía `Service` tipo `LoadBalancer`, como se documentó en la evidencia de ejecución).
+
+**Sobre las 4 flechas hacia MySQL:** no es una base de datos compartida entre servicios. Es **un solo servidor MySQL** (un Pod, un PVC) que aloja **tres bases de datos separadas**: `auth_db` (usada solo por Auth), `orders_db` (usada solo por Orders) y `sa_p5` (usada por ambos CronJobs para su tabla `cron_logs`). Cada servicio tiene sus propias credenciales y su propio `DB_NAME`, definidos en su respectivo `ConfigMap` (`charts/auth/templates/configmap.yaml`, `charts/orders/templates/configmap.yaml`, `templates/cronjobs-configmaps.yaml`); solo comparten el motor de base de datos para ahorrar recursos, no las tablas.
 
 ## Servicios cubiertos y tipo de prueba
 
@@ -195,6 +240,8 @@ Opcional pero recomendado: crear el *environment* `production-aks` en **Settings
 
 **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`.
 
+> **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
+
 ### 7. Verificar y, cuando termines, eliminar el clúster
 
 ```bash
@@ -206,8 +253,9 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 ```
 ## Cómo ejecutar cada etapa
 
-- **Build + Test + Dockerización:** se dispara solo con cualquier `push` o `pull_request`, sin acción adicional.
-- **Activar el despliegue:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
+- **Build + Test + Dockerización:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
+- **Deploy efímero en kind:** se dispara solo, automáticamente, después de cada `push` (no corre en Pull Requests, porque ahí no se publica ninguna imagen que descargar).
+- **Activar el despliegue real a AKS:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
 
 ## Documentación técnica del flujo
 
@@ -215,7 +263,8 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 2. **Build + Test:** valida que el código compila (TypeScript, Go) y que la lógica de negocio funciona contra una base de datos real, no contra mocks completos. Esto detecta errores de queries SQL, de esquemas de Mongo o de serialización que un mock no vería.
 3. **Dockerización:** una vez que las 6 pruebas pasan, se construyen las 7 imágenes (`docker/build-push-action` con caché de capas vía GitHub Actions cache) y se etiquetan según la rama/tag/commit.
 4. **Push a GHCR:** en cualquier evento que no sea un Pull Request, las imágenes se publican en `ghcr.io/elfbibv/*`, listas para ser referenciadas por un despliegue.
-5. **Deploy (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
+5. **Deploy efímero en kind (automático):** una vez que `build-and-push` publicó las 7 imágenes en GHCR (nunca antes: se sigue el principio "build once, deploy many"), el job `deploy-kind` descarga esas mismas imágenes con `docker pull` (usando el tag de sha corto del commit), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, las carga ahí con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). No corre en Pull Requests (ahí `build-and-push` no publica nada). Esto prueba que el chart de Helm funciona de verdad, con la imagen real que se acaba de publicar, sin depender de Azure ni de ningún secret adicional.
+6. **Deploy real a AKS (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
 
 ## Evidencia de ejecución
 
@@ -231,6 +280,10 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 ![Salida de kubectl get service mostrando la IP externa del API Gateway](docs/evidencia-ejecucion/kubectl-get-service-ip-externa.png)
 
+**4. Verificación independiente desde Azure Cloud Shell** (otra terminal, distinta a la máquina local usada en las capturas anteriores): `az aks get-credentials` + `kubectl get pods -n sa-p5` confirmando los mismos pods `Running`/`Completed`:
+
+![Verificación desde Azure Cloud Shell mostrando los mismos pods corriendo](docs/evidencia-ejecucion/cloud-shell-verificacion-pods.png)
+
 ## Referencias
 
 - [Documentación oficial de GitHub Actions](https://docs.github.com/actions)
@@ -238,3 +291,6 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 - [docker/build-push-action](https://github.com/docker/build-push-action)
 - [Service containers en GitHub Actions](https://docs.github.com/actions/using-containerized-services/about-service-containers)
 - [azure/login (GitHub Action)](https://github.com/Azure/login)
+- [kind (Kubernetes IN Docker)](https://kind.sigs.k8s.io/)
+- [helm/kind-action](https://github.com/helm/kind-action)
+

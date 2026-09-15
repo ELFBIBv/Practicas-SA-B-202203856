@@ -116,10 +116,51 @@ Con las pruebas ya en verde, los 7 jobs de `build-and-push` construían la image
 
 ## 9. Próximos pasos sugeridos (en orden)
 
-1. ✅ Hacer commit y push de `feature/Practica7` — hecho.
-2. ✅ Corregir el error de `pnpm` (sección 7.1) — hecho.
-3. ✅ Aplicar el fix de permisos de GHCR (sección 7.2) en los 7 paquetes — hecho.
-4. ✅ Confirmar que los 6 jobs de prueba y los 7 de `build-and-push` quedaran en verde — confirmado.
-5. Tomar la captura de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarla a `P7/README.md`.
-![alt text](image.png)
-6. Crear el clúster de AKS nuevo siguiendo el procedimiento ya documentado en `P7/README.md` (sección "Procedimiento para crear el clúster de AKS de esta práctica", con nombres `rg-practica7`/`aks-sa-p7` para no confundirlo con el de P6, que ya fue eliminado), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true`. **En curso.**
+1. Hacer commit y push de `feature/Practica7` — hecho.
+2. Corregir el error de `pnpm` (sección 7.1) — hecho.
+3. Aplicar el fix de permisos de GHCR (sección 7.2) en los 7 paquetes — hecho.
+4. Confirmar que los 6 jobs de prueba y los 7 de `build-and-push` quedaran en verde — confirmado.
+5. Tomar las capturas de pantalla que pide la rúbrica como "Evidencia de ejecución" y agregarlas a `P7/README.md` — hecho (incluye una verificación extra desde Azure Cloud Shell).
+6. Crear el clúster de AKS nuevo (`rg-practica7`/`aks-sa-p7`), agregar los secrets/variables de Azure, y disparar el workflow manualmente con `deploy=true` — hecho, deploy verificado con los 16 pods corriendo.
+
+## 10. Deploy efímero adicional con kind (sin nube)
+
+Con el deploy a AKS ya funcionando, se agregó una etapa más al pipeline: un despliegue de prueba usando **kind** (Kubernetes IN Docker), que crea un clúster de Kubernetes real pero temporal *dentro del propio runner de GitHub Actions*.
+
+**Por qué se agregó:** hasta ese punto, el único job que aplicaba el chart de Helm de verdad era `deploy-to-aks`, y ese es manual y depende de que exista un clúster de Azure (con costo). Eso significa que un cambio al chart (por ejemplo, un typo en un `deployment.yaml`) solo se hubiera detectado si alguien disparaba manualmente el deploy a AKS. Con `kind`, ese mismo chart se prueba **automáticamente en cada push o Pull Request**, gratis, sin ninguna nube ni credenciales, porque el clúster vive y muere dentro del mismo job.
+
+**Corrección importante en el proceso:** el primer intento fue instalar `kind` y crear un clúster de prueba en la máquina local, para validar el enfoque antes de escribir el YAML — la misma disciplina de "probar antes de entregar" que se usó para las pruebas de Python/Node/Go. Pero eso no era lo que se pedía: la idea era que esta etapa corriera dentro de GitHub Actions, no en la computadora del estudiante. Se corrigió de inmediato: se eliminó el binario descargado (nunca se llegó a crear ningún clúster ni contenedor local) y el job se escribió y se valida directamente en el workflow de GitHub.
+
+**Cómo funciona el job `deploy-kind` (versión inicial):**
+
+1. Construye las 7 imágenes con `docker buildx build --load` (quedan solo en el Docker local del runner, no se publican a ningún registry).
+2. Crea el clúster con la acción `helm/kind-action`, que además instala `kubectl` y lo destruye automáticamente al terminar el job.
+3. Carga cada imagen al clúster con `kind load docker-image` — como el clúster corre en contenedores separados, no ve por sí solo las imágenes del Docker del runner; hay que "inyectárselas" explícitamente.
+4. Instala el chart con `helm upgrade --install`, combinando `values.yaml` + `values-dev.yaml` (que ya traían configuración pensada para un entorno local: `storageClass: standard`, que además es exactamente el nombre de la StorageClass que trae `kind` por defecto) + un `values-kind.yaml` nuevo que baja las réplicas a 1 por servicio, para no saturar los recursos limitados del runner (2 vCPU / ~7GB RAM).
+5. Verifica con `kubectl get pods/pvc/svc/cronjobs`, y si algo falla, imprime `kubectl describe` y los logs de los contenedores para facilitar el diagnóstico.
+
+**Resultado inicial:** el pipeline quedó con dos niveles de despliegue automatizado: uno **automático y gratuito** (kind) que garantiza que el chart de Helm siempre es válido, y uno **manual y real** (AKS) para cuando se necesita demostrar el despliegue en la nube.
+
+### 10.1 Corrección de diseño: "build once, deploy many"
+
+En la primera versión, `deploy-kind` corría **en paralelo** con `build-and-push` (ambos dependían solo de los 6 jobs de test), y construía sus propias 7 imágenes locales desde cero, sin relación con las que se publicaban en GHCR.
+
+**El problema, que se detectó al revisar el diagrama de una ejecución real en Actions:** eso significa que el código se estaba compilando **dos veces** — una vez para publicar en GHCR y otra, por separado, para probar en kind. Aunque el resultado debería ser idéntico (mismo código, mismo `Dockerfile`), no hay ninguna garantía real de que la imagen que se prueba sea la misma que se publica; viola un principio básico de CI/CD llamado **"build once, deploy many"** (construir el artefacto una sola vez y reutilizar exactamente ese mismo artefacto en todas las etapas siguientes, en vez de reconstruirlo).
+
+**Fix:** se cambió `deploy-kind` para que:
+
+- Dependa de `build-and-push` (`needs: build-and-push`) en vez de depender directamente de los 6 jobs de test — ahora corre *después*, no en paralelo.
+- Ya no construye nada: hace `docker login` a GHCR y **descarga con `docker pull`** las 7 imágenes que `build-and-push` acaba de publicar (usando el mismo tag de sha corto del commit), y las re-etiqueta a los nombres simples que espera el chart (`auth:latest`, `catalog:latest`, etc.) antes de cargarlas a kind.
+- Solo corre cuando el evento no es un Pull Request (`if: github.event_name != 'pull_request'`), porque en un PR `build-and-push` únicamente valida el `Dockerfile` sin publicar nada — no habría ninguna imagen que descargar.
+
+**Resultado final:** ahora sí se prueba en kind exactamente la misma imagen, bit por bit, que queda publicada en GHCR — no una reconstrucción aparte. El costo es que `deploy-kind` ya no corre en paralelo con `build-and-push` (tarda un poco más en total), pero la garantía que da es mucho más fuerte y honesta.
+
+**Error real al primer intento en GitHub Actions:** el paso "Preparar dependencias del chart" falló con:
+
+```
+Error: no repository definition for https://nats-io.github.io/k8s/helm/charts/. Please add the missing repos via 'helm repo add'
+```
+
+**Causa:** el job usaba `helm dependency build`, que exige que el repositorio de Helm de cada dependencia externa (en este chart, solo `nats` viene de un repo remoto; el resto son subcharts locales) ya esté registrado de antemano con `helm repo add`. El job de `deploy-to-aks` nunca tuvo este problema porque usa `helm dependency update`, que sí resuelve la URL del repositorio al vuelo, sin necesitar ese registro previo.
+
+**Fix:** cambiar `helm dependency build` por `helm dependency update` en el job `deploy-kind`, para que quedara igual que en `deploy-to-aks` (que ya se sabía que funcionaba). Lección: al copiar un patrón de un job a otro, más vale usar exactamente el mismo comando que ya se probó, en vez de una variante "en teoría equivalente" sin probar.
