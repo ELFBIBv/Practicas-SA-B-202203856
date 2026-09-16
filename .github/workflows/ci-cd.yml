@@ -380,7 +380,10 @@ jobs:
       - name: Instalar el controlador de Argo Rollouts
         run: |
           kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
-          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+          # --server-side evita el límite de 256 KB en la anotación
+          # last-applied-configuration que rompe con CRDs grandes como las
+          # de Argo Rollouts bajo un `kubectl apply` normal.
+          kubectl apply --server-side --force-conflicts -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
           kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
 
       - name: Instalar el plugin kubectl-argo-rollouts
