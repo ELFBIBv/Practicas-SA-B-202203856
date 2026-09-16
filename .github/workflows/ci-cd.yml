@@ -397,13 +397,28 @@ jobs:
 
       - name: Desplegar el baseline en el clúster efímero
         run: |
+          # Sin --wait: Helm intenta comprobar la salud del Rollout con un
+          # chequeo genérico (kstatus) que no entiende su esquema de status
+          # y se queda en "Unknown" hasta agotar el timeout. La espera real
+          # del Rollout se hace aparte con wait-for-rollout.sh; los demás
+          # recursos (Deployments/StatefulSets, que Helm sí reconoce) se
+          # esperan en el siguiente paso.
           helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
             --create-namespace \
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
-            --wait --timeout 5m
+            --timeout 5m
+
+      - name: Esperar a que los demás servicios (no el gateway) estén listos
+        run: |
+          for dep in $(kubectl get deployment -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "deployment/$dep" -n sa-p5 --timeout=180s
+          done
+          for sts in $(kubectl get statefulset -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "statefulset/$sts" -n sa-p5 --timeout=180s
+          done
 
       - name: Esperar a que el Rollout inicial quede Healthy
         run: bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
