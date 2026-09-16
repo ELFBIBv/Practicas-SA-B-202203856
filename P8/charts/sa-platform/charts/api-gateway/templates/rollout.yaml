@@ -23,7 +23,7 @@ spec:
               - templateName: {{ include "api-gateway.fullname" . }}-health
             args:
               - name: candidate-url
-                value: http://{{ include "api-gateway.fullname" . }}-canary
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
         - setWeight: 50
@@ -32,7 +32,7 @@ spec:
               - templateName: {{ include "api-gateway.fullname" . }}-health
             args:
               - name: candidate-url
-                value: http://{{ include "api-gateway.fullname" . }}-canary
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
         - setWeight: 80
@@ -41,7 +41,7 @@ spec:
               - templateName: {{ include "api-gateway.fullname" . }}-health
             args:
               - name: candidate-url
-                value: http://{{ include "api-gateway.fullname" . }}-canary
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
   selector:

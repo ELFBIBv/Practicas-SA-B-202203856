@@ -1,4 +1,4 @@
-name: CI/CD - Plataforma de Microservicios (Practica 7)
+name: CI/CD - Plataforma de Microservicios (Practica 8)
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/auth/auth-service
+        working-directory: P8/auth/auth-service
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +56,7 @@ jobs:
         with:
           node-version: "20"
           cache: pnpm
-          cache-dependency-path: P7/auth/auth-service/pnpm-lock.yaml
+          cache-dependency-path: P8/auth/auth-service/pnpm-lock.yaml
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/catalog/catalog-service
+        working-directory: P8/catalog/catalog-service
     services:
       mongo:
         image: mongo:6
@@ -90,7 +90,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/catalog/catalog-service/requirements-dev.txt
+          cache-dependency-path: P8/catalog/catalog-service/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/orders/order-service
+        working-directory: P8/orders/order-service
     services:
       mysql:
         image: mysql:8.0
@@ -126,11 +126,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/orders/order-service/requirements-dev.txt
+          cache-dependency-path: P8/orders/order-service/requirements-dev.txt
 
       - name: Aplicar el esquema de orders al MySQL de la CI
         run: mysql -h127.0.0.1 -uroot -proot orders_db_test < orders-db/init.sql
-        working-directory: P7/orders
+        working-directory: P8/orders
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -149,14 +149,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/notifications/notification-service
+        working-directory: P8/notifications/notification-service
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: P7/notifications/notification-service/go.mod
-          cache-dependency-path: P7/notifications/notification-service/go.sum
+          go-version-file: P8/notifications/notification-service/go.mod
+          cache-dependency-path: P8/notifications/notification-service/go.sum
 
       - name: Vet (análisis estático)
         run: go vet ./...
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/cronjobs/cron1
+        working-directory: P8/cronjobs/cron1
     services:
       mysql:
         image: mysql:8.0
@@ -190,7 +190,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/cronjobs/cron1/requirements-dev.txt
+          cache-dependency-path: P8/cronjobs/cron1/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -208,7 +208,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/cronjobs/cron2
+        working-directory: P8/cronjobs/cron2
     services:
       mysql:
         image: mysql:8.0
@@ -229,7 +229,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/cronjobs/cron2/requirements-dev.txt
+          cache-dependency-path: P8/cronjobs/cron2/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -266,25 +266,25 @@ jobs:
       matrix:
         include:
           - name: api-gateway
-            context: P7/api-gateway
+            context: P8/api-gateway
             image: sa-api-gateway
           - name: auth-service
-            context: P7/auth/auth-service
+            context: P8/auth/auth-service
             image: sa-auth-service
           - name: catalog-service
-            context: P7/catalog/catalog-service
+            context: P8/catalog/catalog-service
             image: sa-catalog-service
           - name: order-service
-            context: P7/orders/order-service
+            context: P8/orders/order-service
             image: sa-order-service
           - name: notification-service
-            context: P7/notifications/notification-service
+            context: P8/notifications/notification-service
             image: sa-notification-service
           - name: cron1
-            context: P7/cronjobs/cron1
+            context: P8/cronjobs/cron1
             image: sa-cron1
           - name: cron2
-            context: P7/cronjobs/cron2
+            context: P8/cronjobs/cron2
             image: sa-cron2
     steps:
       - uses: actions/checkout@v4
@@ -367,28 +367,86 @@ jobs:
       - name: Crear clúster local con kind
         uses: helm/kind-action@v1
         with:
-          cluster_name: p7-kind
+          cluster_name: p8-kind
 
       - name: Cargar las imágenes al clúster de kind
         run: |
           for name in api-gateway auth catalog orders notifications cron1 cron2; do
-            kind load docker-image "${name}:latest" --name p7-kind
+            kind load docker-image "${name}:latest" --name p8-kind
           done
 
       - uses: azure/setup-helm@v4
 
-      - name: Preparar dependencias del chart
-        run: helm dependency update P7/charts/sa-platform
-
-      - name: Desplegar el chart en el clúster efímero
+      - name: Instalar el controlador de Argo Rollouts
         run: |
-          helm upgrade --install sa-platform P7/charts/sa-platform \
+          kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+          kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+
+      - name: Instalar el plugin kubectl-argo-rollouts
+        run: |
+          curl -sSL -o kubectl-argo-rollouts https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+          chmod +x kubectl-argo-rollouts
+          sudo mv kubectl-argo-rollouts /usr/local/bin/kubectl-argo-rollouts
+
+      - name: Preparar dependencias del chart
+        run: helm dependency update P8/charts/sa-platform
+
+      - name: Desplegar el baseline en el clúster efímero
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
             --create-namespace \
-            --values P7/charts/sa-platform/values.yaml \
-            --values P7/charts/sa-platform/values-dev.yaml \
-            --values P7/charts/sa-platform/values-kind.yaml \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
             --wait --timeout 5m
+
+      - name: Esperar a que el Rollout inicial quede Healthy
+        run: bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+
+      # El primer `helm upgrade --install` no ejecuta pasos de canary (no hay
+      # ReplicaSet estable previo contra el cual comparar), así que para
+      # demostrar el canary real hay que publicar una segunda revisión.
+      - name: Construir versiones adicionales del gateway para el canary
+        run: |
+          docker build -t api-gateway:healthy-v2 \
+            --build-arg APP_VERSION=healthy-v2 --build-arg FAULT_MODE=false \
+            P8/api-gateway
+          docker build -t api-gateway:fault \
+            --build-arg APP_VERSION=fault-v3 --build-arg FAULT_MODE=true \
+            P8/api-gateway
+          kind load docker-image api-gateway:healthy-v2 --name p8-kind
+          kind load docker-image api-gateway:fault --name p8-kind
+
+      - name: "Canary sano: publicar healthy-v2 y verificar promoción automática"
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
+            --namespace sa-p5 \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set api-gateway.image.tag=healthy-v2
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color
+
+      - name: "Fallo inducido: publicar versión defectuosa (FAULT_MODE=true)"
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
+            --namespace sa-p5 \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set api-gateway.image.tag=fault
+
+      - name: Verificar que el canary detecta el fallo y revierte automáticamente
+        run: |
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Degraded 180
+          echo "--- Evidencia: estado del Rollout tras el fallo inducido ---"
+          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color
+          echo "--- Evidencia: AnalysisRuns y por qué fallaron ---"
+          kubectl get analysisruns -n sa-p5
+          kubectl describe analysisruns -n sa-p5
 
       - name: Verificar el despliegue
         if: always()
@@ -396,18 +454,20 @@ jobs:
           kubectl get pods -n sa-p5 -o wide
           kubectl get pvc,svc -n sa-p5
           kubectl get cronjobs -n sa-p5
+          kubectl get rollout,analysistemplate -n sa-p5
 
       - name: Diagnóstico si algo falló
         if: failure()
         run: |
           kubectl describe pods -n sa-p5
           kubectl logs -n sa-p5 -l app.kubernetes.io/part-of=sa-platform --all-containers --tail=100 || true
+          kubectl describe rollout sa-platform-api-gateway -n sa-p5 || true
 
   # ---------------------------------------------------------------------
   # Etapa 5: despliegue a AKS con Helm. NO se dispara con un push normal:
   # solo corre si se lanza manualmente el workflow (workflow_dispatch) con
   # el checkbox "deploy" activado, y solo llega a hacer algo si además
-  # existen los secrets/vars de Azure descritos en P7/README.md. Mientras
+  # existen los secrets/vars de Azure descritos en P8/README.md. Mientras
   # esas condiciones no se cumplan, este job queda configurado pero
   # inactivo, tal como se pidió para no gastar créditos de Azure.
   # ---------------------------------------------------------------------
@@ -440,7 +500,7 @@ jobs:
       - uses: azure/setup-helm@v4
 
       - name: Actualizar dependencias del chart
-        run: helm dependency update P7/charts/sa-platform
+        run: helm dependency update P8/charts/sa-platform
 
       - name: Asegurar namespace e imagePullSecret de GHCR
         run: |
@@ -455,10 +515,10 @@ jobs:
       - name: Desplegar con Helm
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          helm upgrade --install "$RELEASE" P7/charts/sa-platform \
+          helm upgrade --install "$RELEASE" P8/charts/sa-platform \
             --namespace "$NAMESPACE" \
             --create-namespace \
-            --values P7/charts/sa-platform/values-azure.yaml \
+            --values P8/charts/sa-platform/values-azure.yaml \
             --set api-gateway.image.tag="$SHORT_SHA" \
             --set auth.image.tag="$SHORT_SHA" \
             --set catalog.image.tag="$SHORT_SHA" \
