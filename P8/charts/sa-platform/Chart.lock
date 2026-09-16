@@ -1,7 +1,7 @@
 dependencies:
 - name: api-gateway
   repository: file://./charts/api-gateway
-  version: 0.1.0
+  version: 0.2.0
 - name: auth
   repository: file://./charts/auth
   version: 0.1.0
@@ -23,5 +23,5 @@ dependencies:
 - name: mongodb
   repository: file://./charts/mongodb
   version: 0.1.0
-digest: sha256:7c2f08e51a84ec7ed345640e103feabe7009f6b7a41dacd4853e0ccf0bff96ef
-generated: "2026-09-04T10:14:26.30106379-06:00"
+digest: sha256:f4a62bdb5cfb43110f70b30a5c0e2e09c0b3f2a58ae181e7ca00c35365506615
+generated: "2026-09-15T13:58:30.554763999-06:00"

@@ -1,16 +1,49 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "api-gateway.fullname" . }}
   labels:
     {{- include "api-gateway.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  progressDeadlineAbort: true
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
+    canary:
+      stableService: {{ include "api-gateway.fullname" . }}-stable
+      canaryService: {{ include "api-gateway.fullname" . }}-canary
       maxUnavailable: 0
       maxSurge: 1
+      abortScaleDownDelaySeconds: 30
+      steps:
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
+        - setWeight: 80
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
   selector:
     matchLabels:
       {{- include "api-gateway.selectorLabels" . | nindent 6 }}
@@ -46,19 +79,19 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           startupProbe:
             httpGet:
-              path: /
+              path: /ready
               port: http
             failureThreshold: 30
             periodSeconds: 10

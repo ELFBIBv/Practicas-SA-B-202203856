@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "api-gateway.fullname" . }}-health
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  args:
+    - name: candidate-url
+  metrics:
+    - name: candidate-health
+      interval: {{ .Values.analysis.interval }}
+      count: {{ .Values.analysis.count }}
+      failureLimit: 1
+      consecutiveErrorLimit: 1
+      successCondition: result == "ok"
+      provider:
+        web:
+          url: "{{ `{{ args.candidate-url }}` }}/health"
+          timeoutSeconds: 5
+          jsonPath: "{$.status}"

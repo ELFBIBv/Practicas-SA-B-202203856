@@ -69,7 +69,8 @@ nats:
     enabled: false
 
 api-gateway:
-  replicaCount: 2
+  # Cinco réplicas permiten representar exactamente el primer peso de 20 %.
+  replicaCount: 5
   image:
     repository: ghcr.io/elfbibv/sa-api-gateway
     tag: "v1.0.0"
@@ -79,6 +80,14 @@ api-gateway:
     port: 80
   ingress:
     enabled: false
+  rollout:
+    pauseDuration: 30s
+  analysis:
+    interval: 10s
+    count: 3
+  autoscaling:
+    minReplicas: 5
+    maxReplicas: 10
   resources:
     limits:
       cpu: 100m

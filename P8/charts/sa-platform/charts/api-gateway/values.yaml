@@ -1,8 +1,8 @@
-replicaCount: 2
+replicaCount: 5
 image:
-  repository: api-gateway
+  repository: ghcr.io/elfbibv/sa-api-gateway
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "v1.0.0"
 serviceAccount:
   create: true
   name: ""
@@ -11,6 +11,15 @@ service:
   port: 80
 ingress:
   enabled: true
+rollout:
+  pauseDuration: 30s
+analysis:
+  interval: 10s
+  count: 3
+autoscaling:
+  minReplicas: 5
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true

@@ -6,7 +6,16 @@
 # todo el stack sin quedarse sin recursos, probando el chart real sin ninguna
 # nube ni imágenes publicadas (se cargan en local con `kind load docker-image`).
 api-gateway:
-  replicaCount: 1
+  # Dos réplicas reducen consumo; kind solo valida recursos, no porcentajes exactos.
+  replicaCount: 2
+  rollout:
+    pauseDuration: 5s
+  analysis:
+    interval: 2s
+    count: 1
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
 
 auth:
   replicaCount: 1

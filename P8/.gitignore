@@ -1,0 +1,4 @@
+# Helm dependencies
+charts/sa-platform/charts/*.tgz
+charts/sa-platform/charts/nats/
+charts/sa-platform/charts/redis/

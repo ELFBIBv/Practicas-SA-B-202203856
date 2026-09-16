@@ -40,6 +40,9 @@ api-gateway:
     limits:
       cpu: 100m
       memory: 128Mi
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
 
 auth:
   replicaCount: 2
