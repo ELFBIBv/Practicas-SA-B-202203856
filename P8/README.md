@@ -45,7 +45,7 @@ flowchart TD
         C[Build de 7 imágenes\ncon docker/build-push-action]
         C --> D{"¿Es pull_request?"}
         D -- Sí --> E[Solo build, sin push\nvalida el Dockerfile]
-        D -- No --> F[Push a ghcr.io/elfbibv/*\ntag = branch, sha, semver o latest]
+        D -- No --> F[Push a ghcr.io/elfbibv/*\ntag = branch, sha o semver]
     end
 
     F --> K
@@ -120,12 +120,12 @@ Los "contenedores de servicio" (`services:` en el workflow) son bases de datos r
 | Evento | Qué corre |
 | --- | --- |
 | `push` a `feature/**` | Build + Test de los 6 servicios, luego build+push de las imágenes con tag = nombre de rama y sha corto (ej. `feature-Practica7`, `a1b2c3d`) |
-| `push` a `develop` o `main` | Igual que arriba; además, si es `main`, agrega el tag `latest` |
+| `push` a `develop` o `main` | Igual que arriba: publica tags de rama y sha corto, sin utilizar `latest` |
 | `push` de un tag `vX.Y.Z` | Igual, y adicionalmente etiqueta la imagen con esa versión semántica |
 | `pull_request` hacia `main`/`develop` | Build + Test + build de Docker **sin publicar** (valida que el `Dockerfile` compila antes de aceptar el PR) |
 | `workflow_dispatch` con `deploy=true` | Todo lo anterior, y al final ejecuta el job de despliegue a AKS |
 
-Nunca se sobreescribe el tag `v1.0.0` que ya usan los `values-azure.yaml` de P6/P7 a menos que explícitamente se cree ese mismo tag de git.
+Las imágenes usadas como baseline local tienen la versión explícita `v8.0.0`; las versiones semánticas publicadas en GHCR únicamente se crean desde un tag Git `vX.Y.Z`.
 
 ## Permisos y secrets necesarios en GitHub
 
@@ -293,4 +293,3 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 - [azure/login (GitHub Action)](https://github.com/Azure/login)
 - [kind (Kubernetes IN Docker)](https://kind.sigs.k8s.io/)
 - [helm/kind-action](https://github.com/helm/kind-action)
-

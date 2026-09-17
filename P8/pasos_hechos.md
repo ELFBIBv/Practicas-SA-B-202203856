@@ -72,7 +72,7 @@ El archivo [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) tien
 Decisiones de diseño relevantes:
 
 - **`concurrency`**: si haces dos pushes seguidos a la misma rama, GitHub cancela la ejecución vieja en vez de dejarlas correr ambas y desperdiciar minutos.
-- **Etiquetado de imágenes (`docker/metadata-action`)**: cada imagen se etiqueta con el nombre de la rama y el hash corto del commit siempre, con `latest` solo si el push fue a la rama principal, y con la versión semántica solo si el push fue un tag `vX.Y.Z`. Así nunca se pisa por accidente la imagen `v1.0.0` que ya está funcionando en el `values-azure.yaml` de P6.
+- **Etiquetado de imágenes (`docker/metadata-action`)**: cada imagen se etiqueta con el nombre de la rama y el hash corto del commit; la versión semántica solo se publica cuando el push corresponde a un tag Git `vX.Y.Z`. No se publica `latest`, y kind usa `v8.0.0`, `v8.0.1` y `v8.0.2` para distinguir el baseline, el canary sano y el fallo inducido.
 - **`push: false` en Pull Requests**: en un PR solo se *construye* la imagen (para detectar un `Dockerfile` roto) pero no se publica nada. Publicar imágenes de código que todavía no fue aprobado no tiene sentido.
 - **El job de deploy nunca corre solo:** se requiere `workflow_dispatch` (un clic manual en la pestaña Actions) **y** el checkbox `deploy=true`. Ni un `push` normal ni un Pull Request lo disparan. Esto fue a propósito, siguiendo la instrucción de no gastar créditos de Azure todavía.
 - **Por qué el deploy usa un PAT (`GHCR_PAT`) y no el `GITHUB_TOKEN`:** el `GITHUB_TOKEN` que usa el job de build/push es válido solo mientras dura esa ejecución del workflow. Si se usara ese mismo token para crear el `imagePullSecret` dentro del clúster de Kubernetes, el secret dejaría de funcionar en cuanto el workflow terminara, y el clúster no podría volver a descargar la imagen (por ejemplo, si un pod se reinicia horas después). Por eso, para ese paso específico, se necesita un Personal Access Token de larga duración, igual al que ya usaste manualmente al configurar `ghcr-secret` en la Práctica 6.
@@ -150,7 +150,7 @@ En la primera versión, `deploy-kind` corría **en paralelo** con `build-and-pus
 **Fix:** se cambió `deploy-kind` para que:
 
 - Dependa de `build-and-push` (`needs: build-and-push`) en vez de depender directamente de los 6 jobs de test — ahora corre *después*, no en paralelo.
-- Ya no construye nada: hace `docker login` a GHCR y **descarga con `docker pull`** las 7 imágenes que `build-and-push` acaba de publicar (usando el mismo tag de sha corto del commit), y las re-etiqueta a los nombres simples que espera el chart (`auth:latest`, `catalog:latest`, etc.) antes de cargarlas a kind.
+- Ya no construye nada: hace `docker login` a GHCR y **descarga con `docker pull`** las 7 imágenes que `build-and-push` acaba de publicar (usando el mismo tag de sha corto del commit), y las re-etiqueta con la versión explícita del baseline (`auth:v8.0.0`, `catalog:v8.0.0`, etc.) antes de cargarlas a kind.
 - Solo corre cuando el evento no es un Pull Request (`if: github.event_name != 'pull_request'`), porque en un PR `build-and-push` únicamente valida el `Dockerfile` sin publicar nada — no habría ninguna imagen que descargar.
 
 **Resultado final:** ahora sí se prueba en kind exactamente la misma imagen, bit por bit, que queda publicada en GHCR — no una reconstrucción aparte. El costo es que `deploy-kind` ya no corre en paralelo con `build-and-push` (tarda un poco más en total), pero la garantía que da es mucho más fuerte y honesta.

@@ -30,6 +30,9 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: elfbibv
+  BASELINE_IMAGE_TAG: v8.0.0
+  HEALTHY_CANARY_IMAGE_TAG: v8.0.1
+  FAULT_CANARY_IMAGE_TAG: v8.0.2
 
 jobs:
   # ---------------------------------------------------------------------
@@ -308,7 +311,6 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=,format=short
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build y push
         uses: docker/build-push-action@v6
@@ -361,7 +363,7 @@ jobs:
           for plain in "${!IMAGES[@]}"; do
             ghcr_image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${IMAGES[$plain]}:${SHORT_SHA}"
             docker pull "$ghcr_image"
-            docker tag "$ghcr_image" "${plain}:latest"
+            docker tag "$ghcr_image" "${plain}:${BASELINE_IMAGE_TAG}"
           done
 
       - name: Crear clúster local con kind
@@ -372,7 +374,7 @@ jobs:
       - name: Cargar las imágenes al clúster de kind
         run: |
           for name in api-gateway auth catalog orders notifications cron1 cron2; do
-            kind load docker-image "${name}:latest" --name p8-kind
+            kind load docker-image "${name}:${BASELINE_IMAGE_TAG}" --name p8-kind
           done
 
       - uses: azure/setup-helm@v4
@@ -414,6 +416,13 @@ jobs:
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
+            --set-string api-gateway.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG" \
             --timeout 5m
 
       - name: Esperar a que los demás servicios (no el gateway) estén listos
@@ -433,16 +442,16 @@ jobs:
       # demostrar el canary real hay que publicar una segunda revisión.
       - name: Construir versiones adicionales del gateway para el canary
         run: |
-          docker build -t api-gateway:healthy-v2 \
-            --build-arg APP_VERSION=healthy-v2 --build-arg FAULT_MODE=false \
+          docker build -t "api-gateway:${HEALTHY_CANARY_IMAGE_TAG}" \
+            --build-arg APP_VERSION="$HEALTHY_CANARY_IMAGE_TAG" --build-arg FAULT_MODE=false \
             P8/api-gateway
-          docker build -t api-gateway:fault \
-            --build-arg APP_VERSION=fault-v3 --build-arg FAULT_MODE=true \
+          docker build -t "api-gateway:${FAULT_CANARY_IMAGE_TAG}" \
+            --build-arg APP_VERSION="$FAULT_CANARY_IMAGE_TAG" --build-arg FAULT_MODE=true \
             P8/api-gateway
-          kind load docker-image api-gateway:healthy-v2 --name p8-kind
-          kind load docker-image api-gateway:fault --name p8-kind
+          kind load docker-image "api-gateway:${HEALTHY_CANARY_IMAGE_TAG}" --name p8-kind
+          kind load docker-image "api-gateway:${FAULT_CANARY_IMAGE_TAG}" --name p8-kind
 
-      - name: "Canary sano: publicar healthy-v2 y verificar promoción automática"
+      - name: "Canary sano: publicar versión nueva y verificar promoción automática"
         run: |
           helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
@@ -450,7 +459,13 @@ jobs:
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
-            --set api-gateway.image.tag=healthy-v2
+            --set-string api-gateway.image.tag="$HEALTHY_CANARY_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG"
           bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
           kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color
 
@@ -462,7 +477,13 @@ jobs:
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
-            --set api-gateway.image.tag=fault
+            --set-string api-gateway.image.tag="$FAULT_CANARY_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG"
 
       - name: Verificar que el canary detecta el fallo y revierte automáticamente
         run: |

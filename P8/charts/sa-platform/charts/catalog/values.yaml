@@ -2,7 +2,7 @@ replicaCount: 2
 image:
   repository: catalog
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "v8.0.0"
 serviceAccount:
   create: true
   name: ""

@@ -73,7 +73,7 @@ api-gateway:
   replicaCount: 5
   image:
     repository: ghcr.io/elfbibv/sa-api-gateway
-    tag: "v1.0.0"
+    tag: "v8.0.0"
     pullPolicy: IfNotPresent
   service:
     type: LoadBalancer
@@ -100,7 +100,7 @@ auth:
   replicaCount: 2
   image:
     repository: ghcr.io/elfbibv/sa-auth-service
-    tag: "v1.0.0"
+    tag: "v8.0.0"
     pullPolicy: IfNotPresent
   config:
     nodeEnv: production
@@ -118,7 +118,7 @@ catalog:
   replicaCount: 2
   image:
     repository: ghcr.io/elfbibv/sa-catalog-service
-    tag: "v1.0.0"
+    tag: "v8.0.0"
     pullPolicy: IfNotPresent
   resources:
     limits:
@@ -132,7 +132,7 @@ orders:
   replicaCount: 2
   image:
     repository: ghcr.io/elfbibv/sa-order-service
-    tag: "v1.0.0"
+    tag: "v8.0.0"
     pullPolicy: IfNotPresent
   config:
     databaseUser: user
@@ -149,7 +149,7 @@ notifications:
   replicaCount: 2
   image:
     repository: ghcr.io/elfbibv/sa-notification-service
-    tag: "v1.0.0"
+    tag: "v8.0.0"
     pullPolicy: IfNotPresent
   resources:
     limits:
@@ -165,12 +165,12 @@ cronjobs:
   cron1:
     image:
       repository: ghcr.io/elfbibv/sa-cron1
-      tag: "v1.0.0"
+      tag: "v8.0.0"
       pullPolicy: IfNotPresent
   cron2:
     image:
       repository: ghcr.io/elfbibv/sa-cron2
-      tag: "v1.0.0"
+      tag: "v8.0.0"
       pullPolicy: IfNotPresent
 
 quota:

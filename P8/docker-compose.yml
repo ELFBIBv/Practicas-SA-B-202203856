@@ -1,28 +1,28 @@
 services:
   api-gateway:
     build: ./api-gateway
-    image: api-gateway:latest
+    image: api-gateway:v8.0.0
 
   auth-service:
     build: ./auth/auth-service
-    image: auth:latest
+    image: auth:v8.0.0
 
   catalog-service:
     build: ./catalog/catalog-service
-    image: catalog:latest
+    image: catalog:v8.0.0
 
   order-service:
     build: ./orders/order-service
-    image: orders:latest
+    image: orders:v8.0.0
 
   notification-service:
     build: ./notifications/notification-service
-    image: notifications:latest
+    image: notifications:v8.0.0
 
   cron1:
     build: ./cronjobs/cron1
-    image: cron1:latest
+    image: cron1:v8.0.0
 
   cron2:
     build: ./cronjobs/cron2
-    image: cron2:latest
+    image: cron2:v8.0.0
