@@ -12,8 +12,8 @@ spec:
       initialDelay: 5s
       interval: {{ .Values.analysis.interval }}
       count: {{ .Values.analysis.count }}
-      failureLimit: 1
-      consecutiveErrorLimit: 1
+      failureLimit: 0
+      consecutiveErrorLimit: 0
       successCondition: result == "ok"
       provider:
         web:

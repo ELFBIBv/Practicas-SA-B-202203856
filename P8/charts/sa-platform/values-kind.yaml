@@ -12,7 +12,7 @@ api-gateway:
     pauseDuration: 5s
   analysis:
     interval: 2s
-    count: 1
+    count: 3
   autoscaling:
     minReplicas: 2
     maxReplicas: 4
