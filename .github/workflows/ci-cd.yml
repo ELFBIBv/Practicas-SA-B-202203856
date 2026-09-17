@@ -376,6 +376,10 @@ jobs:
           done
 
       - uses: azure/setup-helm@v4
+        with:
+          # Helm 4 usa Server-Side Apply por defecto para releases nuevas.
+          # Fijamos la versión para que el pipeline no cambie sin revisión.
+          version: v4.3.0
 
       - name: Instalar el controlador de Argo Rollouts
         run: |
@@ -406,6 +410,7 @@ jobs:
           helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
             --create-namespace \
+            --server-side=false \
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
@@ -441,6 +446,7 @@ jobs:
         run: |
           helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
+            --server-side=false \
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
@@ -452,6 +458,7 @@ jobs:
         run: |
           helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
+            --server-side=false \
             --values P8/charts/sa-platform/values.yaml \
             --values P8/charts/sa-platform/values-dev.yaml \
             --values P8/charts/sa-platform/values-kind.yaml \
@@ -516,6 +523,8 @@ jobs:
             --overwrite-existing
 
       - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.0
 
       - name: Actualizar dependencias del chart
         run: helm dependency update P8/charts/sa-platform
@@ -536,6 +545,7 @@ jobs:
           helm upgrade --install "$RELEASE" P8/charts/sa-platform \
             --namespace "$NAMESPACE" \
             --create-namespace \
+            --server-side=false \
             --values P8/charts/sa-platform/values-azure.yaml \
             --set api-gateway.image.tag="$SHORT_SHA" \
             --set auth.image.tag="$SHORT_SHA" \

@@ -17,6 +17,7 @@ analysis:
   interval: 10s
   count: 3
 autoscaling:
+  enabled: true
   minReplicas: 5
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
