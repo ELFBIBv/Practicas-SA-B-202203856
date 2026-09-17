@@ -26,6 +26,8 @@ spec:
             args:
               - name: candidate-url
                 value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
         - setWeight: 50
@@ -35,6 +37,8 @@ spec:
             args:
               - name: candidate-url
                 value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
         - setWeight: 80
@@ -44,6 +48,8 @@ spec:
             args:
               - name: candidate-url
                 value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
         - pause:
             duration: {{ .Values.rollout.pauseDuration }}
   selector:

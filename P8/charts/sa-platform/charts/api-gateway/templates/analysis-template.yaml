@@ -7,6 +7,7 @@ metadata:
 spec:
   args:
     - name: candidate-url
+    - name: expected-version
   metrics:
     - name: candidate-health
       initialDelay: 5s
@@ -14,9 +15,13 @@ spec:
       count: {{ .Values.analysis.count }}
       failureLimit: 0
       consecutiveErrorLimit: 0
-      successCondition: result == "ok"
+      successCondition: >-
+        result.status == "ok" &&
+        result.version == "{{ `{{ args.expected-version }}` }}"
       provider:
         web:
           url: "{{ `{{ args.candidate-url }}` }}/health"
           timeoutSeconds: 5
-          jsonPath: "{$.status}"
+          headers:
+            - key: Connection
+              value: close

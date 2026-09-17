@@ -487,12 +487,22 @@ jobs:
 
       - name: Verificar que el canary detecta el fallo y revierte automáticamente
         run: |
-          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Degraded 180
+          verification_status=0
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Degraded 180 || verification_status=$?
           echo "--- Evidencia: estado del Rollout tras el fallo inducido ---"
-          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color
-          echo "--- Evidencia: AnalysisRuns y por qué fallaron ---"
-          kubectl get analysisruns -n sa-p5
-          kubectl describe analysisruns -n sa-p5
+          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color || true
+          echo "--- Evidencia: AnalysisRuns y mediciones ---"
+          kubectl get analysisruns -n sa-p5 -o wide || true
+          kubectl get analysisruns -n sa-p5 -o yaml || true
+          echo "--- Evidencia: selectores de los Services estable y canary ---"
+          kubectl get service sa-platform-api-gateway-stable sa-platform-api-gateway-canary -n sa-p5 -o yaml || true
+          echo "--- Evidencia: endpoints actuales del Service canary ---"
+          kubectl get endpointslices -n sa-p5 \
+            -l kubernetes.io/service-name=sa-platform-api-gateway-canary \
+            -o yaml || true
+          echo "--- Evidencia: pods, imágenes y hashes del gateway ---"
+          kubectl get pods -n sa-p5 -l app.kubernetes.io/name=api-gateway -o wide --show-labels || true
+          exit "$verification_status"
 
       - name: Verificar el despliegue
         if: always()
