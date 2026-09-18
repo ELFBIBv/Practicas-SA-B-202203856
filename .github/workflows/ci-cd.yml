@@ -730,6 +730,14 @@ jobs:
             kind load docker-image "${name}:${BASELINE_IMAGE_TAG}" --name p8-loadtest
           done
 
+      - uses: azure/setup-helm@v4
+        with:
+          # Mismo motivo que en deploy-kind: Helm 4 usa Server-Side Apply
+          # por defecto, de ahí el --server-side=false de abajo. Sin este
+          # paso, el runner trae un Helm 3.x que ni siquiera reconoce esa
+          # flag.
+          version: v4.3.0
+
       - name: Preparar dependencias del chart
         run: helm dependency update P8/charts/sa-platform
 
