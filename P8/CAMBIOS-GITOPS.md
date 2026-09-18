@@ -195,3 +195,42 @@ En `ci-cd.yml` se agregó el job `load-test`: despliega un baseline propio en su
 El enunciado pide "Pruebas automatizadas: scripts de humo, integración y carga, con sus reportes de ejecución" y, en la tabla de enlaces obligatoria, la ruta del archivo del reporte dentro del repositorio. La ruta del script queda documentada acá; el reporte de cada corrida (que cambia cada vez) se sube como artifact del run de CI, igual que se hizo con los reportes de Trivy y el SBOM en la Fase 3 — no tiene sentido versionar un archivo que se regenera en cada ejecución.
 
 **Nada de esto necesitó Azure** — se escribió y se probó íntegramente contra un `kind` local con el chart real desplegado. El job de CI tampoco lo necesita.
+
+**Dos errores reales que aparecieron recién en la primera corrida en GitHub Actions** (no los agarró la prueba local, porque al verificar a mano se corrieron los comandos adaptados en la propia terminal en vez del YAML tal cual, y eso tapó los dos huecos sin querer):
+
+1. `Error: unknown flag: --server-side` — el job `load-test` usa `--server-side=false` en el `helm upgrade --install` (una flag de Helm 4), pero nunca instalaba esa versión como sí hace `deploy-kind`; corría con el Helm 3.x por defecto del runner, que no la reconoce. Fix: agregar el paso `azure/setup-helm@v4` fijando `v4.3.0`, igual que `deploy-kind`.
+2. `no matches for kind "Rollout"/"AnalysisTemplate" in version "argoproj.io/v1alpha1"` — el chart de `sa-platform` define recursos de Argo Rollouts, y `load-test` nunca instalaba esos CRDs antes de desplegar. Fix: agregar el mismo paso "Instalar el controlador de Argo Rollouts" que ya tenía `deploy-kind` (sin el plugin `kubectl-argo-rollouts`, que no hace falta acá porque `load-test` no corre canary).
+
+Se comparó el resto de los pasos de `load-test` contra `deploy-kind` uno por uno para confirmar que no quedara un tercer hueco del mismo tipo. Con ambos fixes, la corrida [35374724033](https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033) terminó completa, con los 3 jobs nuevos (`kyverno-policy-check`, `load-test`, `deploy-kind`) en verde.
+
+## Fase 6 — Informe de incidente y diagrama del flujo
+
+**Qué se hizo:** se agregaron [`P8/informe-incidente.md`](informe-incidente.md) y [`P8/diagrama-flujo.md`](diagrama-flujo.md), los dos entregables del enunciado que no dependen de tener un AKS real levantado.
+
+El informe de incidente usa los 5 campos exactos que pide la sección 4.2 del enunciado (qué falló, cómo se detectó, cómo se contuvo, tiempo de recuperación, cómo prevenirlo), con datos tomados directamente de los logs reales de la corrida 35374724033 — no inventados: el mensaje de error real de Argo Rollouts (`received non 2xx response code: 500`), los timestamps exactos del fallo inducido y de la contención (17.7 segundos calculados restando los dos timestamps reales), y el estado real de los `ReplicaSet`/`AnalysisRun` (`SetWeight: 0`, `ActualWeight: 0`, confirmando 0% de tráfico real expuesto).
+
+El diagrama es Mermaid embebido en Markdown (GitHub lo renderiza nativo, sin depender de ninguna herramienta externa ni de generar una imagen aparte). Se validó que el diagrama efectivamente renderiza sin errores de sintaxis instalando `@mermaid-js/mermaid-cli` y su Chrome headless localmente, generando un SVG real a partir del mismo bloque `mermaid` del archivo, y revisando que la estructura del SVG resultante (todos los nodos, las 3 ramas de validación en rojo, el nodo de rollback) coincidiera con lo esperado — no se asumió que iba a renderizar bien solo por tener sintaxis "razonable".
+
+De paso se completaron con evidencia real 4 filas más de la tabla de enlaces obligatoria del README (ejecución exitosa, reversión automática, despliegue rechazado por política, imagen firmada), todas apuntando a la misma corrida 35374724033 — dejando explícito en cada una que esa evidencia es del `kind` efímero del pipeline, no de AKS todavía, para no sobrerrepresentar lo que falta.
+
+**Por qué:** el enunciado exige exactamente 5 campos en el informe de incidente (ni más ni menos) y un diagrama "desde el commit hasta el clúster, con puntos de validación y de reversión" — ambos se pueden construir con evidencia que ya existe del pipeline, sin necesitar Azure para nada. Se dejó explícito en el diagrama que el repo de código nunca cruza hacia el clúster: todo lo que hace es proponer un PR en el repo GitOps, y quien aplica el cambio es ArgoCD — es el mismo principio de separación que ya se documentó en README-gitops.md del repo GitOps.
+
+**Nada de esto necesitó Azure.**
+
+## Fase 7 — Clúster AKS real y Terraform aplicado
+
+**Qué se hizo:** se levantó el clúster de verdad, con permiso explícito del usuario y confirmando primero la cuota disponible (`az vm list-usage`) y qué suscripción quedaba activa (`az account set --subscription "Azure for Students"`, verificado con `az account list` que la otra suscripción vinculada a la cuenta — de pago — no era la default, para no gastar de ahí por error):
+
+```bash
+az group create --name rg-practica8 --location chilecentral
+az aks create --resource-group rg-practica8 --name aks-sa-p8 \
+  --location chilecentral --tier free --node-count 2 --node-vm-size Standard_DS2_v2 \
+  --network-plugin azure --network-plugin-mode overlay --network-dataplane cilium \
+  --generate-ssh-keys
+```
+
+Clúster con 2 nodos `Ready` en `chilecentral`. Luego se corrió el Terraform de `P8/terraform/` (namespace, cuotas, límites, RBAC) contra ese clúster real: `terraform init` → `terraform plan -out=tfplan` (revisado antes de aplicar: 9 recursos a crear, 0 a destruir) → `terraform apply tfplan`. Los 9 recursos se crearon sin error, y se verificaron con `kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5` contra el clúster real — evidencia guardada en `terraform/plan.log`, `terraform/apply.log` y `terraform/kubectl-get-evidencia.log`.
+
+**Un detalle operativo que vale la pena dejar anotado:** al correr `az aks get-credentials`, el `~/.kube/config` local estaba corrupto (28 bytes, sin las claves `clusters`/`contexts`) — resto de haber borrado varios clústeres `kind` efímeros durante las pruebas locales de las Fases 4-6. Se respaldó (`mv` a `.bak`, no se borró) antes de dejar que `az aks get-credentials` generara uno nuevo.
+
+**Por qué:** era el paso bloqueante para todo lo que falta (ArgoCD, Kyverno en el clúster real, Sealed Secrets, disparar el pipeline hacia AKS). Terraform no crea el clúster en sí — solo administra namespace/cuotas/RBAC dentro de uno que ya existe (ver `terraform/README.md`) — por eso el clúster se creó primero, a mano con `az aks create`, siguiendo el procedimiento ya documentado en `P8/README.md`.

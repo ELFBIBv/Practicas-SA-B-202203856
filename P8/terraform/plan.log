@@ -1,0 +1,324 @@
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [32m+[0m create[0m
+
+Terraform will perform the following actions:
+
+[1m  # kubernetes_limit_range.platform[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_limit_range" "platform" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-p5-platform-limits"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m spec {
+          [32m+[0m[0m limit {
+              [32m+[0m[0m default         = {
+                  [32m+[0m[0m "cpu"    = "1"
+                  [32m+[0m[0m "memory" = "1Gi"
+                }
+              [32m+[0m[0m default_request = {
+                  [32m+[0m[0m "cpu"    = "100m"
+                  [32m+[0m[0m "memory" = "128Mi"
+                }
+              [32m+[0m[0m type            = "Container"
+            }
+        }
+    }
+
+[1m  # kubernetes_namespace.sa_platform[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_namespace" "sa_platform" {
+      [32m+[0m[0m id                               = (known after apply)
+      [32m+[0m[0m wait_for_default_service_account = false
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m labels           = {
+              [32m+[0m[0m "app.kubernetes.io/managed-by" = "terraform"
+              [32m+[0m[0m "practica"                     = "p8"
+            }
+          [32m+[0m[0m name             = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+    }
+
+[1m  # kubernetes_resource_quota.platform[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_resource_quota" "platform" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-p5-platform-quota"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m spec {
+          [32m+[0m[0m hard = {
+              [32m+[0m[0m "limits.cpu"             = "3200m"
+              [32m+[0m[0m "limits.memory"          = "8Gi"
+              [32m+[0m[0m "persistentvolumeclaims" = "10"
+              [32m+[0m[0m "pods"                   = "40"
+              [32m+[0m[0m "requests.cpu"           = "2500m"
+              [32m+[0m[0m "requests.memory"        = "6Gi"
+              [32m+[0m[0m "services"               = "20"
+            }
+        }
+    }
+
+[1m  # kubernetes_role.operator[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_role" "operator" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-operator"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m [90mnull[0m[0m,
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "configmaps",
+              [32m+[0m[0m "events",
+              [32m+[0m[0m "persistentvolumeclaims",
+              [32m+[0m[0m "pods",
+              [32m+[0m[0m "services",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "apps",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "deployments",
+              [32m+[0m[0m "replicasets",
+              [32m+[0m[0m "statefulsets",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "batch",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "cronjobs",
+              [32m+[0m[0m "jobs",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "argoproj.io",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "analysisruns",
+              [32m+[0m[0m "analysistemplates",
+              [32m+[0m[0m "rollouts",
+              [32m+[0m[0m "rollouts/status",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "patch",
+              [32m+[0m[0m "watch",
+            ]
+        }
+    }
+
+[1m  # kubernetes_role.viewer[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_role" "viewer" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-viewer"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m [90mnull[0m[0m,
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "configmaps",
+              [32m+[0m[0m "events",
+              [32m+[0m[0m "persistentvolumeclaims",
+              [32m+[0m[0m "pods",
+              [32m+[0m[0m "services",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "apps",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "deployments",
+              [32m+[0m[0m "replicasets",
+              [32m+[0m[0m "statefulsets",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "batch",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "cronjobs",
+              [32m+[0m[0m "jobs",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+      [32m+[0m[0m rule {
+          [32m+[0m[0m api_groups = [
+              [32m+[0m[0m "argoproj.io",
+            ]
+          [32m+[0m[0m resources  = [
+              [32m+[0m[0m "analysisruns",
+              [32m+[0m[0m "analysistemplates",
+              [32m+[0m[0m "rollouts",
+            ]
+          [32m+[0m[0m verbs      = [
+              [32m+[0m[0m "get",
+              [32m+[0m[0m "list",
+              [32m+[0m[0m "watch",
+            ]
+        }
+    }
+
+[1m  # kubernetes_role_binding.operator[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_role_binding" "operator" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-operator-binding"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m role_ref {
+          [32m+[0m[0m api_group = "rbac.authorization.k8s.io"
+          [32m+[0m[0m kind      = "Role"
+          [32m+[0m[0m name      = "sa-platform-operator"
+        }
+
+      [32m+[0m[0m subject {
+          [32m+[0m[0m api_group = (known after apply)
+          [32m+[0m[0m kind      = "ServiceAccount"
+          [32m+[0m[0m name      = "sa-platform-operator"
+          [32m+[0m[0m namespace = "sa-p5"
+        }
+    }
+
+[1m  # kubernetes_role_binding.viewer[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_role_binding" "viewer" {
+      [32m+[0m[0m id = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-viewer-binding"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+
+      [32m+[0m[0m role_ref {
+          [32m+[0m[0m api_group = "rbac.authorization.k8s.io"
+          [32m+[0m[0m kind      = "Role"
+          [32m+[0m[0m name      = "sa-platform-viewer"
+        }
+
+      [32m+[0m[0m subject {
+          [32m+[0m[0m api_group = (known after apply)
+          [32m+[0m[0m kind      = "ServiceAccount"
+          [32m+[0m[0m name      = "sa-platform-viewer"
+          [32m+[0m[0m namespace = "sa-p5"
+        }
+    }
+
+[1m  # kubernetes_service_account.operator[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_service_account" "operator" {
+      [32m+[0m[0m automount_service_account_token = true
+      [32m+[0m[0m default_secret_name             = (known after apply)
+      [32m+[0m[0m id                              = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-operator"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+    }
+
+[1m  # kubernetes_service_account.viewer[0m will be created
+[0m  [32m+[0m[0m resource "kubernetes_service_account" "viewer" {
+      [32m+[0m[0m automount_service_account_token = true
+      [32m+[0m[0m default_secret_name             = (known after apply)
+      [32m+[0m[0m id                              = (known after apply)
+
+      [32m+[0m[0m metadata {
+          [32m+[0m[0m generation       = (known after apply)
+          [32m+[0m[0m name             = "sa-platform-viewer"
+          [32m+[0m[0m namespace        = "sa-p5"
+          [32m+[0m[0m resource_version = (known after apply)
+          [32m+[0m[0m uid              = (known after apply)
+        }
+    }
+
+[1mPlan:[0m [0m9 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  [32m+[0m[0m namespace                = "sa-p5"
+  [32m+[0m[0m operator_service_account = "sa-platform-operator"
+  [32m+[0m[0m platform_quota_name      = "sa-p5-platform-quota"
+  [32m+[0m[0m viewer_service_account   = "sa-platform-viewer"
+[90m
+─────────────────────────────────────────────────────────────────────────────[0m
+
+Saved the plan to: tfplan
+
+To perform exactly these actions, run the following command to apply:
+    terraform apply "tfplan"
