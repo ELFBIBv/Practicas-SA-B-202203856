@@ -738,6 +738,17 @@ jobs:
           # flag.
           version: v4.3.0
 
+      - name: Instalar el controlador de Argo Rollouts
+        run: |
+          # El chart de sa-platform define recursos Rollout/AnalysisTemplate
+          # (argoproj.io/v1alpha1): sin estos CRDs, "helm upgrade --install"
+          # falla al no reconocer esos kinds. Mismo paso que deploy-kind; acá
+          # no hace falta además el plugin kubectl-argo-rollouts porque este
+          # job no corre canary, solo espera Healthy con wait-for-rollout.sh.
+          kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply --server-side --force-conflicts -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+          kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+
       - name: Preparar dependencias del chart
         run: helm dependency update P8/charts/sa-platform
 
