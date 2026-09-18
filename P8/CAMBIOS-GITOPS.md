@@ -36,3 +36,50 @@ echo "TU_TOKEN_AQUI" | gh secret set GITOPS_PAT --repo ELFBIBv/Practicas-SA-B-20
 ```
 
 **Aviso sobre Azure:** esta fase no necesitó tocar Azure ni AKS — es un cambio puramente de CI y de estructura de repos. La próxima fase que sí lo requiere es instalar ArgoCD sobre un clúster AKS persistente y aplicar `argocd/application.yaml`; en ese punto se lo avisaré explícitamente antes de continuar, porque implica costo real por hora y acceso a un clúster que no tengo credenciales para crear ni alcanzar desde este entorno.
+
+### Fase 1.1 — Fix: diff de PR ilegible por el round-trip de `yq`
+
+Al probar la Fase 1 en un run real, el PR abierto en el repo GitOps mostraba decenas de líneas en blanco borradas además del cambio de tag, porque `yq -i` reescribe el YAML completo al guardar (pierde el formato original). Eso mezclaba el cambio real (7 tags) con ruido de reformateo, dificultando la revisión del PR.
+
+**Fix:** se reemplazó `yq` por [`P8/scripts/bump-image-tag.py`](scripts/bump-image-tag.py), un script que ubica el bloque de cada servicio con una expresión regular y reemplaza únicamente su línea `tag: "..."`, sin tocar el resto del archivo. Probado localmente contra el `values-azure.yaml` real: produce exactamente 7 líneas cambiadas, nada más, y el YAML resultante sigue siendo válido. Verificado también en un run real de GitHub Actions — el PR #2 en el repo GitOps mostró el diff limpio esperado.
+
+## Fase 2 — Terraform: namespace, cuotas, límites y RBAC
+
+**Qué se hizo:**
+
+Se agregó [`P8/terraform/`](terraform/), un módulo de Terraform que usa el provider `kubernetes` (no `azurerm`: el enunciado pide Terraform para lo que vive *dentro* del clúster — namespace, cuotas, límites, RBAC — no para crear el AKS en sí, que se sigue haciendo con `az aks create` como ya documentaba `P8/README.md`). Administra:
+
+- `kubernetes_namespace.sa_platform`: el namespace `sa-p5`.
+- `kubernetes_resource_quota.platform` + `kubernetes_limit_range.platform`: una cuota y un límite de **nivel de plataforma** (tenant), con nombres distintos a los que ya crea el chart de Helm (`sa-platform-quota`/`sa-platform-limits`, definidos en `templates/namespace-quotas.yaml` con los valores de `values-azure.yaml`). No son redundantes: Kubernetes exige que cada pod satisfaga *todas* las ResourceQuota de su namespace a la vez, así que esto modela un patrón real — la plataforma fija un techo (Terraform) dentro del cual la aplicación se autoimpone un presupuesto más ajustado (Helm). El razonamiento completo está en `P8/terraform/README.md`.
+- Dos pares ServiceAccount + Role + RoleBinding: `sa-platform-viewer` (solo lectura: `get/list/watch` sobre pods, deployments, Rollouts, CronJobs) y `sa-platform-operator` (lo mismo, más `patch` sobre `rollouts`/`rollouts/status` para poder hacer `kubectl argo rollouts promote/abort/retry` a mano). Ninguno de los dos tiene acceso a Secrets ni permiso de borrado.
+
+El código se validó localmente con `terraform fmt -check` y `terraform validate` (ambos en verde) — **no** se corrió `terraform plan`/`apply` contra un clúster real, porque no tengo credenciales de Azure ni acceso al AKS desde este entorno.
+
+### Fase 2.1 — Fix: la cuota de plataforma excedía la capacidad física del clúster
+
+Al revisar los valores por defecto de `platform_quota` (a pedido explícito, no fue algo que yo detectara antes de que se preguntara), aparecieron números elegidos sin cruzarlos contra la capacidad real del clúster: `limits_cpu: "8"` y `requests_cpu: "4"` superaban las **~3.9 vCPU asignables** que da un clúster de 2 nodos `Standard_DS2_v2` (después de las reservas de sistema de AKS), y `limits_memory: "10Gi"` ocupaba el 100% de la memoria asignable (~10Gi), sin dejar margen para `coredns`/`metrics-server`/CNI. No rompía nada (Kubernetes acepta una cuota más grande que la capacidad física sin quejarse), pero como "techo" no era real — nunca se podría alcanzar, porque el clúster se queda sin nodos antes.
+
+**Fix:** `platform_quota` bajó a `requests_cpu: "2500m"` / `limits_cpu: "3200m"` / `requests_memory: "6Gi"` / `limits_memory: "8Gi"`, con margen real debajo de la capacidad física.
+
+Eso dejó expuesto un segundo problema, preexistente: el `quota:` del chart de Helm (`values-azure.yaml`, `requestsCpu: "3"` / `limitsCpu: "6"`) ya era irreal para el mismo clúster de 2 nodos, y ahora además quedaba por encima del nuevo techo de plataforma, invirtiendo el diseño de dos capas (la plataforma debe ser el límite más generoso). Se ajustó también a `requestsCpu: "2"` / `requestsMemory: 5Gi` / `limitsCpu: "3"` / `limitsMemory: 7Gi` — con margen sobre el consumo real observado (~1.2-1.7 vCPU / ~1.5-2.1Gi sumando todas las réplicas, incluyendo el pico transitorio del canary) y por debajo del techo de plataforma. Verificado con `helm lint --strict` y `helm template` sobre el chart real: renderiza correctamente con los nuevos valores.
+
+**Por qué:**
+
+El enunciado pide explícitamente "Código Terraform: Namespaces, cuotas, límites y RBAC, con evidencia de plan y apply" como entregable propio, separado de los Helm charts. Mantener esta responsabilidad en Terraform (en vez de meterlo todo en el chart) separa dos preocupaciones distintas: gobernanza de la plataforma (quién puede entrar al namespace, cuánto puede consumir como techo) vs. despliegue de la aplicación (qué corre y con qué imagen), que es justamente el tipo de separación que la Práctica 8 evalúa.
+
+**Acción tuya pendiente (necesito que corras esto vos, con tu acceso a Azure):**
+
+```bash
+az aks get-credentials --resource-group rg-practica8 --name aks-sa-p8 --overwrite-existing
+
+cd P8/terraform
+cp terraform.tfvars.example terraform.tfvars   # ajustar si hace falta
+terraform init
+terraform plan  -out=tfplan | tee plan.log
+terraform apply tfplan       | tee apply.log
+kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5
+```
+
+Guardá `plan.log`, `apply.log` y la salida de ese `kubectl get` — es la evidencia de "plan y apply" que pide la rúbrica, y hay que enlazarla desde la tabla de enlaces obligatoria de `P8/README.md`.
+
+**Aviso sobre Azure:** esta es la primera fase que si necesita tocar un clúster real para completarse (el `terraform apply`). Yo no tengo esas credenciales ni acceso desde este entorno, así que el código queda listo y validado sintácticamente, pero el `apply` te corresponde a vos correrlo cuando tengas tiempo/crédito de tu suscripción de estudiante. Avisame el resultado (o pegame el log si algo falla) y seguimos.

@@ -173,8 +173,16 @@ cronjobs:
       tag: "v8.0.0"
       pullPolicy: IfNotPresent
 
+# Calculado contra la capacidad real del clúster de 2 nodos
+# Standard_DS2_v2 (~3.9 vCPU / ~10Gi asignables tras las reservas de AKS,
+# ver P8/terraform/README.md) y por debajo del techo de plataforma que
+# administra Terraform (P8/terraform/variables.tf: platform_quota), para
+# que el diseño de dos capas se cumpla: plataforma > app > uso real. El
+# consumo real de todos los servicios juntos ronda ~1.2-1.7 vCPU y
+# ~1.5-2.1Gi (sumando réplicas, con margen para el pico transitorio del
+# canary), muy por debajo de este techo.
 quota:
-  requestsCpu: "3"
-  requestsMemory: 4Gi
-  limitsCpu: "6"
-  limitsMemory: 8Gi
+  requestsCpu: "2"
+  requestsMemory: 5Gi
+  limitsCpu: "3"
+  limitsMemory: 7Gi

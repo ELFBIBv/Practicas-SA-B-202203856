@@ -1,0 +1,7 @@
+# Copiar a terraform.tfvars (que está en .gitignore) y ajustar si hace falta.
+# Los valores de acá abajo ya coinciden con lo que deja "az aks get-credentials"
+# siguiendo el procedimiento de P8/README.md.
+
+kubeconfig_path = "~/.kube/config"
+kube_context    = "aks-sa-p8"
+namespace       = "sa-p5"

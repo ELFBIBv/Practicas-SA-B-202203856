@@ -2,7 +2,7 @@
 
 Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P8/api-gateway`, `P8/auth`, `P8/catalog`, `P8/orders`, `P8/notifications`, `P8/cronjobs` y sobre el chart de Helm en `P8/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
 
-> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7; el flujo de despliegue directo ya se eliminó (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)), pero todavía faltan Terraform, ArgoCD persistente, Kyverno, Trivy/SBOM/Cosign, pruebas de carga y completar la tabla de enlaces obligatoria abajo, que por ahora está marcada como `PENDIENTE`.
+> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7; el flujo de despliegue directo ya se eliminó y el código de Terraform (namespace, cuotas, límites, RBAC) ya existe en [`P8/terraform/`](terraform/) (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)), pero el `terraform apply` real contra AKS todavía no se corrió. Faltan además ArgoCD persistente, Kyverno, Trivy/SBOM/Cosign, pruebas de carga y completar la tabla de enlaces obligatoria abajo, que por ahora está marcada como `PENDIENTE`.
 
 ## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
 
@@ -222,14 +222,29 @@ az aks get-credentials \
 kubectl get nodes
 ```
 
-### 3. Crear el `imagePullSecret` de GHCR directamente en el clúster (manual, ya no vía CI)
+### 3. Aplicar Terraform: namespace, cuotas, límites y RBAC
+
+Con el clúster ya creado (`az aks get-credentials` del paso 2 ya deja el contexto de kubectl listo), este es el primer paso declarativo — crea el namespace `sa-p5` antes de que nada más lo necesite. Detalle completo, incluyendo por qué hay dos `ResourceQuota` distintas en el mismo namespace, en [`P8/terraform/README.md`](terraform/README.md):
+
+```bash
+cd P8/terraform
+cp terraform.tfvars.example terraform.tfvars   # ajustar kube_context si hace falta
+terraform init
+terraform plan  -out=tfplan | tee plan.log
+terraform apply tfplan       | tee apply.log
+kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5
+cd ../..
+```
+
+Guardar `plan.log`, `apply.log` y la salida de ese último `kubectl get` como evidencia — van enlazados desde la tabla de enlaces obligatoria.
+
+### 4. Crear el `imagePullSecret` de GHCR directamente en el clúster (manual, ya no vía CI)
 
 > Desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), este secreto ya no lo crea el pipeline (antes lo hacía el job `deploy-to-aks`, hoy eliminado). Se crea una sola vez, a mano, contra el clúster real. Ver también la nota sobre migrarlo a Sealed Secrets/External Secrets pendiente en el repo GitOps.
 
-En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. Luego:
+En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. El namespace ya lo creó Terraform en el paso anterior, así que alcanza con:
 
 ```bash
-kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret docker-registry ghcr-secret \
   --namespace "$NAMESPACE" \
   --docker-server=ghcr.io \
@@ -237,7 +252,7 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-password="TU_TOKEN_read:packages"
 ```
 
-### 4. Cargar `GITOPS_PAT` en el repositorio de código
+### 5. Cargar `GITOPS_PAT` en el repositorio de código
 
 Este es el único secret que necesita el pipeline de CI hoy (ver detalle de generación en la sección "Para activar la promoción vía GitOps" más arriba):
 
@@ -245,17 +260,17 @@ Este es el único secret que necesita el pipeline de CI hoy (ver detalle de gene
 echo "TU_TOKEN_AQUI" | gh secret set GITOPS_PAT --repo ELFBIBv/Practicas-SA-B-202203856
 ```
 
-### 5. Instalar ArgoCD y aplicar la Application (pendiente — Fase 3, todavía no implementada)
+### 6. Instalar ArgoCD y aplicar la Application (pendiente — Fase 3, todavía no implementada)
 
-Con el clúster ya creado y el `imagePullSecret` cargado, falta instalar ArgoCD dentro de AKS y aplicar `argocd/application.yaml` del repo GitOps para que empiece a sincronizar `sa-p5`. Esta fase todavía no se hizo — se documentará y ejecutará cuando lleguemos a ella.
+Con el clúster, la infraestructura Terraform y el `imagePullSecret` ya listos, falta instalar ArgoCD dentro de AKS y aplicar `argocd/application.yaml` del repo GitOps para que empiece a sincronizar `sa-p5`. Esta fase todavía no se hizo — se documentará y ejecutará cuando lleguemos a ella.
 
-### 6. Disparar la promoción
+### 7. Disparar la promoción
 
 **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `promote-to-gitops` sincroniza el chart hacia `Practicas-SA-B-202203856-gitops`, actualiza el tag de imagen, y abre un Pull Request ahí — **no** toca el clúster. El cambio llega al clúster recién cuando ese PR se mergea y ArgoCD (Fase 3) lo sincroniza.
 
 > **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
 
-### 7. Verificar y, cuando termines, eliminar el clúster
+### 8. Verificar y, cuando termines, eliminar el clúster
 
 ```bash
 kubectl get pods -n "$NAMESPACE"
