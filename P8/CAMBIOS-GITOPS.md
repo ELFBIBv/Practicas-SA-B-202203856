@@ -113,3 +113,13 @@ Para la firma keyless se agregó el permiso `id-token: write` al job (además de
 El enunciado pide "Evidencia de seguridad: Reporte de Trivy, archivo SBOM y salida de verificación de firma con Cosign" y, por separado, "Bloqueo por vulnerabilidad crítica: URL directa al Pull Request bloqueado" e "Imagen firmada: Referencia completa registro/imagen:tag" en la tabla de enlaces obligatoria. Escanear *antes* de publicar (en vez de escanear la imagen ya publicada) es lo que hace que el bloqueo sea real: una imagen con una vulnerabilidad crítica **nunca llega a existir en GHCR**, no queda ahí "publicada pero marcada como insegura".
 
 **Nada de esto necesitó Azure ni ningún clúster** — corre íntegramente dentro de GitHub Actions. Para generar la evidencia real solo hace falta disparar el pipeline (push normal o un PR) desde `feature/Practica8`; no hay ninguna acción tuya pendiente relacionada con Azure en esta fase.
+
+### Fase 3.1 — El bloqueo se activó de verdad (no fue un simulacro) y el fix
+
+Al correr el pipeline real, el escaneo bloqueante hizo exactamente lo que tenía que hacer: `api-gateway` (`nginx:1.29.1-alpine`, Alpine 3.22.1) tenía 3 vulnerabilidades `CRITICAL` con parche ya publicado (`libssl3`/`libcrypto3` CVE-2026-31789, `pcre2` CVE-2025-58050), y el job se puso en rojo. Otros servicios basados en Alpine/Debian probablemente comparten el mismo tipo de problema (paquetes del sistema operativo desactualizados dentro de la imagen base, no un bug de la aplicación).
+
+**Fix:** se agregó una línea de actualización de paquetes del SO justo después del `FROM` en la imagen final de cada Dockerfile afectado — `RUN apk update && apk upgrade --no-cache` en las bases Alpine (`api-gateway`, `auth-service`, `notification-service`) y `RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*` en las bases Debian slim (`catalog-service`, `order-service`, `cron1`, `cron2`). No cambia la versión mayor de la imagen base, solo trae los parches ya publicados para esa misma versión.
+
+**Verificado, no solo escrito:** se construyó `api-gateway` localmente con Docker antes y después del fix, y se escaneó con Trivy real (`v0.74.0`, misma herramienta que usa el pipeline) contra la imagen ya parcheada: **0 vulnerabilidades CRITICAL** (antes: 3). Los otros 6 Dockerfile se recompilaron localmente para confirmar que el cambio no rompe el build (sí compilan); no se repitió el escaneo completo en los seis por tiempo, pero la técnica es la misma que ya se comprobó end-to-end.
+
+Esta corrida fallida real (antes del fix) ya es evidencia legítima de "Bloqueo por vulnerabilidad crítica" para la tabla de enlaces obligatoria — vale la pena guardar la URL de ese run antes de que quede tapada por corridas más nuevas ya en verde.

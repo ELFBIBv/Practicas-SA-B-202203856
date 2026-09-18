@@ -6,6 +6,9 @@ RUN go mod init notification-service || true
 RUN go build -o main .
 
 FROM alpine:3.21
+# Trae los parches de seguridad ya publicados para esta misma versión de
+# Alpine (no cambia de versión mayor, solo actualiza paquetes del SO).
+RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 COPY --from=builder /app/main .
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

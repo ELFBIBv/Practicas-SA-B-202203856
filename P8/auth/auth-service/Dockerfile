@@ -9,6 +9,10 @@ RUN pnpm run build
 
 FROM node:20-alpine
 
+# Trae los parches de seguridad ya publicados para esta misma versión de
+# Alpine (no cambia de versión mayor, solo actualiza paquetes del SO).
+RUN apk update && apk upgrade --no-cache
+
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=builder --chown=appuser:appgroup /app/package.json /app/pnpm-lock.yaml ./
