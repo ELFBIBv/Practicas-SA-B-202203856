@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: "Ejecutar el despliegue a AKS (requiere secrets de Azure configurados)"
+        description: "Proponer el despliegue: abre un PR al repo GitOps con las imágenes recién publicadas (requiere GITOPS_PAT configurado). El pipeline ya NO aplica nada directo al clúster; ArgoCD es quien sincroniza tras el merge."
         type: boolean
         default: false
 
@@ -520,74 +520,79 @@ jobs:
           kubectl describe rollout sa-platform-api-gateway -n sa-p5 || true
 
   # ---------------------------------------------------------------------
-  # Etapa 5: despliegue a AKS con Helm. NO se dispara con un push normal:
-  # solo corre si se lanza manualmente el workflow (workflow_dispatch) con
-  # el checkbox "deploy" activado, y solo llega a hacer algo si además
-  # existen los secrets/vars de Azure descritos en P8/README.md. Mientras
-  # esas condiciones no se cumplan, este job queda configurado pero
-  # inactivo, tal como se pidió para no gastar créditos de Azure.
+  # Etapa 5: promoción GitOps. Este job NO toca el clúster de AKS bajo
+  # ninguna circunstancia (nada de az login, kubectl ni helm upgrade aquí).
+  # Su única responsabilidad es sincronizar el chart de Helm hacia el
+  # repositorio GitOps (https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops),
+  # actualizar el tag de imagen al commit recién publicado en GHCR, y abrir
+  # un Pull Request ahí. Quien aplica el cambio al clúster es ArgoCD,
+  # corriendo dentro del propio AKS, cuando ese PR se mergea a main.
+  # Solo corre si se lanza manualmente el workflow (workflow_dispatch) con
+  # el checkbox "deploy" activado, y solo si existe el secret GITOPS_PAT
+  # descrito en P8/README.md.
   # ---------------------------------------------------------------------
-  deploy-to-aks:
-    name: "Deploy a AKS (manual)"
+  promote-to-gitops:
+    name: "Proponer despliegue (PR al repo GitOps)"
     needs: build-and-push
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true'
     runs-on: ubuntu-latest
-    environment: production-aks
     env:
-      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-      AKS_CLUSTER: ${{ vars.AZURE_AKS_CLUSTER }}
-      NAMESPACE: sa-p5
-      RELEASE: sa-platform
+      GITOPS_REPO: ELFBIBv/Practicas-SA-B-202203856-gitops
+      GH_TOKEN: ${{ secrets.GITOPS_PAT }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Login en Azure
-        uses: azure/login@v2
+      - name: Checkout del repo de código (fuente del chart)
+        uses: actions/checkout@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          path: source
 
-      - name: Obtener credenciales del cluster AKS
+      - name: Clonar el repositorio GitOps
         run: |
-          az aks get-credentials \
-            --resource-group "$RESOURCE_GROUP" \
-            --name "$AKS_CLUSTER" \
-            --overwrite-existing
+          git clone "https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git" gitops
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
 
-      - uses: azure/setup-helm@v4
-        with:
-          version: v4.3.0
-
-      - name: Actualizar dependencias del chart
-        run: helm dependency update P8/charts/sa-platform
-
-      - name: Asegurar namespace e imagePullSecret de GHCR
+      - name: Sincronizar el chart de Helm hacia el repo GitOps
         run: |
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret docker-registry ghcr-secret \
-            --namespace "$NAMESPACE" \
-            --docker-server=ghcr.io \
-            --docker-username="${{ github.repository_owner }}" \
-            --docker-password="${{ secrets.GHCR_PAT }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+          rsync -a --delete \
+            --exclude 'charts/*.tgz' \
+            source/P8/charts/sa-platform/ gitops/charts/sa-platform/
 
-      - name: Desplegar con Helm
+      - name: Asegurar que yq esté disponible
+        run: |
+          if ! command -v yq >/dev/null 2>&1; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+          yq --version
+
+      - name: Actualizar el tag de imagen al commit recién publicado
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          helm upgrade --install "$RELEASE" P8/charts/sa-platform \
-            --namespace "$NAMESPACE" \
-            --create-namespace \
-            --server-side=false \
-            --values P8/charts/sa-platform/values-azure.yaml \
-            --set api-gateway.image.tag="$SHORT_SHA" \
-            --set auth.image.tag="$SHORT_SHA" \
-            --set catalog.image.tag="$SHORT_SHA" \
-            --set orders.image.tag="$SHORT_SHA" \
-            --set notifications.image.tag="$SHORT_SHA" \
-            --set cronjobs.cron1.image.tag="$SHORT_SHA" \
-            --set cronjobs.cron2.image.tag="$SHORT_SHA" \
-            --wait --timeout 10m
+          cd gitops
+          yq -i ".\"api-gateway\".image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".auth.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".catalog.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".orders.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".notifications.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".cronjobs.cron1.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          yq -i ".cronjobs.cron2.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
 
-      - name: Verificar despliegue
+      - name: Abrir Pull Request en el repo GitOps
         run: |
-          kubectl get pods -n "$NAMESPACE"
-          kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
+          cd gitops
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BRANCH="promote/${SHORT_SHA}"
+          git config user.name "sa-platform-ci"
+          git config user.email "ci@sa-platform.local"
+          git checkout -b "$BRANCH"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Sin cambios que promover (el chart y los tags ya están al día)."
+            exit 0
+          fi
+          git commit -m "deploy: promover sa-platform a ${SHORT_SHA}"
+          git push origin "$BRANCH"
+          gh pr create --repo "$GITOPS_REPO" \
+            --title "Promover sa-platform a ${SHORT_SHA}" \
+            --body "Generado automáticamente por el pipeline de CI del repo de código en el commit ${{ github.sha }}. ArgoCD debe sincronizar este cambio al hacer merge." \
+            --base main --head "$BRANCH"

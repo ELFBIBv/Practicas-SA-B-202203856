@@ -2,14 +2,14 @@
 
 Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P8/api-gateway`, `P8/auth`, `P8/catalog`, `P8/orders`, `P8/notifications`, `P8/cronjobs` y sobre el chart de Helm en `P8/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
 
-> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo el pipeline heredado de la Práctica 7; faltan Terraform, repositorio GitOps, ArgoCD persistente, Kyverno, Trivy/SBOM/Cosign, pruebas de carga y la tabla de enlaces obligatoria abajo, que por ahora está marcada como `PENDIENTE`.
+> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7; el flujo de despliegue directo ya se eliminó (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)), pero todavía faltan Terraform, ArgoCD persistente, Kyverno, Trivy/SBOM/Cosign, pruebas de carga y completar la tabla de enlaces obligatoria abajo, que por ahora está marcada como `PENDIENTE`.
 
 ## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
 
 | Ítem | Enlace o dato requerido |
 | --- | --- |
-| Repositorio GitOps | PENDIENTE |
-| Aplicación en ArgoCD | PENDIENTE |
+| Repositorio GitOps | https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops |
+| Aplicación en ArgoCD | PENDIENTE (falta instalar ArgoCD en el clúster persistente y aplicar `argocd/application.yaml` del repo GitOps) |
 | Ejecución exitosa del pipeline | PENDIENTE |
 | Reversión automática | PENDIENTE |
 | Despliegue rechazado por política | PENDIENTE |
@@ -25,9 +25,9 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica8`. |
 | Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
 | Despliegue efímero en **kind** | **Automático, corre después de cada push (no en PR)** | El job `deploy-kind` descarga las 7 imágenes recién publicadas en GHCR (las mismas que se acaban de subir, no una copia reconstruida aparte), crea un clúster real de Kubernetes (temporal) dentro del propio runner, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
-| Despliegue a AKS | **Verificado (heredado de P7, pendiente re-verificar con canary)** | Clúster `aks-sa-p8` (resource group `rg-practica8`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
+| Despliegue a AKS | **Evidencia histórica de P7 (helm upgrade --install directo), obsoleta** | El clúster `aks-sa-p8`/`rg-practica8` con Argo CD y el flujo GitOps de la Fase 3 (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)) todavía no existe ni se ha verificado; esta fila queda pendiente hasta entonces. |
 
-Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR, despliegue efímero automático en kind, y despliegue real a AKS.
+Se validó de punta a punta: build, test, dockerización, push a GHCR y despliegue efímero automático en kind. El despliegue real a AKS vía ArgoCD todavía está pendiente (Fase 3).
 
 ## Arquitectura del pipeline
 
@@ -77,14 +77,16 @@ flowchart TD
 
     F --> G
 
-    subgraph "Etapa 5: Deploy a AKS (manual)"
+    subgraph "Etapa 5: Promoción GitOps (manual, sin tocar el clúster)"
         G{"¿workflow_dispatch\ncon deploy=true?"}
         G -- No --> H[No se ejecuta nada más]
-        G -- Sí --> I[helm upgrade --install\nen AKS vía P8/charts/sa-platform]
+        G -- Sí --> I[Sincronizar chart + actualizar tag\nen Practicas-SA-B-202203856-gitops]
+        I --> J[Abrir Pull Request\nhacia Practicas-SA-B-202203856-gitops]
+        J --> L((ArgoCD sincroniza\nal mergear el PR))
     end
 ```
 
-Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El siguiente muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez que cualquiera de los dos jobs de deploy (`deploy-kind` o `deploy-to-aks`) termina de aplicar el chart — es la misma topología en ambos casos, solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
+Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El job `promote-to-gitops` (Etapa 5) no tiene credenciales de Azure ni acceso al clúster: solo abre un PR en el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops). Quien realmente aplica el cambio es ArgoCD (Fase 3 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), aún pendiente de instalar). El siguiente diagrama muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez aplicado el chart — es la misma topología tanto en `kind` (Etapa 4, vía `helm upgrade --install` efímero dentro del job) como en AKS (vía ArgoCD), solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
 
 ## Arquitectura de despliegue (qué corre dentro del clúster)
 
@@ -156,19 +158,24 @@ Las imágenes usadas como baseline local tienen la versión explícita `v8.0.0`;
    - Repetir para los 7 paquetes.
    - Si un paquete todavía no existe (se crea por primera vez desde este workflow), este paso no es necesario: queda vinculado automáticamente.
 
-### Para activar el despliegue a AKS
+### Para activar la promoción vía GitOps (job `promote-to-gitops`)
 
-Ya configurado y verificado en este repositorio:
+> **Cambio desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md):** el pipeline ya **no** se conecta a Azure ni al clúster. `AZURE_CREDENTIALS`, `GHCR_PAT` (para el `imagePullSecret` en el clúster) y `production-aks` dejaron de ser necesarios como secrets/variables de GitHub Actions — ese trabajo ahora lo hace ArgoCD dentro del clúster, no el pipeline.
 
 | Tipo | Nombre | Contenido |
 | --- | --- | --- |
-| Secret | `AZURE_CREDENTIALS` | JSON de un service principal con permisos sobre el resource group del clúster. Se genera con `az ad sp create-for-rbac --name sa-p8-cicd --role Contributor --scopes /subscriptions/<ID_SUSCRIPCION>/resourceGroups/<RESOURCE_GROUP> --sdk-auth` |
-| Secret | `GHCR_PAT` | Personal Access Token (classic) con el scope `read:packages`, usado para crear el `imagePullSecret` dentro del clúster. Se usa un PAT y no el `GITHUB_TOKEN` porque este último expira apenas termina el workflow, y el clúster necesita poder re-descargar las imágenes después |
-| Variable (repo) | `AZURE_RESOURCE_GROUP` | `rg-practica8` |
-| Variable (repo) | `AZURE_AKS_CLUSTER` | `aks-sa-p8` |
-| Environment | `production-aks` | Opcional pero recomendado: crear un *environment* en **Settings → Environments** con un "required reviewer" para que el job de deploy pida aprobación manual incluso si alguien dispara el workflow por error |
+| Secret | `GITOPS_PAT` | Personal Access Token (classic) con scope `repo` completo, con permiso de escritura sobre [`ELFBIBv/Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops). Se usa para clonar ese repo, empujar la rama de promoción y abrir el Pull Request. Generación: GitHub → **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, scope `repo`. Carga: `echo "TU_TOKEN_AQUI" | gh secret set GITOPS_PAT` |
 
-Si se elimina el clúster y se necesita recrearlo con otro nombre, estos mismos secrets/variables deben actualizarse. Sin credenciales válidas, el job `deploy-to-aks` falla de forma controlada en el paso de login de Azure, sin riesgo.
+Sin este secret, el job `promote-to-gitops` falla de forma controlada al intentar clonar el repo GitOps, sin riesgo para el clúster (porque ya no tiene forma de tocarlo).
+
+### Para el bootstrap del clúster (manual, fuera de CI)
+
+Estas credenciales ya no viven en GitHub Actions; se usan a mano, una sola vez, para crear el clúster e instalar ArgoCD (ver procedimiento más abajo). Azure se necesitará recién quien lea esta sección lo ejecute con su propia suscripción — avisar antes de correr cualquier paso que genere costo:
+
+| Nombre | Contenido |
+| --- | --- |
+| `AZURE_RESOURCE_GROUP` | `rg-practica8` |
+| `AZURE_AKS_CLUSTER` | `aks-sa-p8` |
 
 ## Procedimiento para crear el clúster de AKS de esta práctica
 
@@ -215,46 +222,36 @@ az aks get-credentials \
 kubectl get nodes
 ```
 
-### 3. Crear el Service Principal para el secret `AZURE_CREDENTIALS`
+### 3. Crear el `imagePullSecret` de GHCR directamente en el clúster (manual, ya no vía CI)
+
+> Desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), este secreto ya no lo crea el pipeline (antes lo hacía el job `deploy-to-aks`, hoy eliminado). Se crea una sola vez, a mano, contra el clúster real. Ver también la nota sobre migrarlo a Sealed Secrets/External Secrets pendiente en el repo GitOps.
+
+En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. Luego:
 
 ```bash
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-az ad sp create-for-rbac \
-  --name "sa-p8-cicd" \
-  --role Contributor \
-  --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
-  --sdk-auth
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret docker-registry ghcr-secret \
+  --namespace "$NAMESPACE" \
+  --docker-server=ghcr.io \
+  --docker-username="ELFBIBv" \
+  --docker-password="TU_TOKEN_read:packages"
 ```
 
-Esto imprime un JSON. Ese JSON completo (tal cual) es el valor del secret `AZURE_CREDENTIALS`.
+### 4. Cargar `GITOPS_PAT` en el repositorio de código
 
-### 4. Generar el `GHCR_PAT`
-
-En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. Copiar el valor (solo se muestra una vez).
-
-### 5. Cargar los secrets y variables en el repositorio
-
-Por la interfaz (**Settings → Secrets and variables → Actions** del repositorio) o con `gh` CLI. Para los dos secrets, la forma más simple es guardar el valor en un archivo temporal y redirigirlo (evita tener que "pegar y Ctrl+D" en la terminal):
+Este es el único secret que necesita el pipeline de CI hoy (ver detalle de generación en la sección "Para activar la promoción vía GitOps" más arriba):
 
 ```bash
-# AZURE_CREDENTIALS: guarda el JSON del paso 3 en un archivo, súbelo, y bórralo
-nano azure-creds.json          # pega el JSON, guarda (Ctrl+O, Enter) y sal (Ctrl+X)
-gh secret set AZURE_CREDENTIALS < azure-creds.json
-rm azure-creds.json            # nunca debe quedar ni commitearse este archivo
-
-# GHCR_PAT: es una sola línea, se puede pasar directo
-echo "TU_TOKEN_AQUI" | gh secret set GHCR_PAT
-
-gh variable set AZURE_RESOURCE_GROUP --body "rg-practica8"
-gh variable set AZURE_AKS_CLUSTER --body "aks-sa-p8"
+echo "TU_TOKEN_AQUI" | gh secret set GITOPS_PAT --repo ELFBIBv/Practicas-SA-B-202203856
 ```
 
-Opcional pero recomendado: crear el *environment* `production-aks` en **Settings → Environments** con un "required reviewer".
+### 5. Instalar ArgoCD y aplicar la Application (pendiente — Fase 3, todavía no implementada)
 
-### 6. Disparar el despliegue
+Con el clúster ya creado y el `imagePullSecret` cargado, falta instalar ArgoCD dentro de AKS y aplicar `argocd/application.yaml` del repo GitOps para que empiece a sincronizar `sa-p5`. Esta fase todavía no se hizo — se documentará y ejecutará cuando lleguemos a ella.
 
-**Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P8/charts/sa-platform` con `values-azure.yaml`.
+### 6. Disparar la promoción
+
+**Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `promote-to-gitops` sincroniza el chart hacia `Practicas-SA-B-202203856-gitops`, actualiza el tag de imagen, y abre un Pull Request ahí — **no** toca el clúster. El cambio llega al clúster recién cuando ese PR se mergea y ArgoCD (Fase 3) lo sincroniza.
 
 > **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
 
@@ -271,7 +268,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 - **Build + Test + Dockerización:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
 - **Deploy efímero en kind:** se dispara solo, automáticamente, después de cada `push` (no corre en Pull Requests, porque ahí no se publica ninguna imagen que descargar).
-- **Activar el despliegue real a AKS:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
+- **Proponer la promoción a producción (PR al repo GitOps):** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere el secret `GITOPS_PAT`. El cambio real al clúster ocurre después, cuando se mergea el PR y ArgoCD sincroniza (Fase 3, pendiente).
 
 ## Documentación técnica del flujo
 
@@ -280,7 +277,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 3. **Dockerización:** una vez que las 6 pruebas pasan, se construyen las 7 imágenes (`docker/build-push-action` con caché de capas vía GitHub Actions cache) y se etiquetan según la rama/tag/commit.
 4. **Push a GHCR:** en cualquier evento que no sea un Pull Request, las imágenes se publican en `ghcr.io/elfbibv/*`, listas para ser referenciadas por un despliegue.
 5. **Deploy efímero en kind (automático):** una vez que `build-and-push` publicó las 7 imágenes en GHCR (nunca antes: se sigue el principio "build once, deploy many"), el job `deploy-kind` descarga esas mismas imágenes con `docker pull` (usando el tag de sha corto del commit), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, las carga ahí con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). No corre en Pull Requests (ahí `build-and-push` no publica nada). Esto prueba que el chart de Helm funciona de verdad, con la imagen real que se acaba de publicar, sin depender de Azure ni de ningún secret adicional.
-6. **Deploy real a AKS (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P8/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
+6. **Promoción GitOps (manual):** sin tocar el clúster ni Azure, sincroniza `P8/charts/sa-platform` hacia el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops), sobreescribe el tag de cada imagen con el commit corto que disparó el workflow, y abre un Pull Request contra `main` de ese repo. ArgoCD (Fase 3, pendiente) es quien realmente aplica el cambio al clúster cuando ese PR se mergea.
 
 ## Evidencia de ejecución
 
