@@ -83,3 +83,32 @@ kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5
 Guardá `plan.log`, `apply.log` y la salida de ese `kubectl get` — es la evidencia de "plan y apply" que pide la rúbrica, y hay que enlazarla desde la tabla de enlaces obligatoria de `P8/README.md`.
 
 **Aviso sobre Azure:** esta es la primera fase que si necesita tocar un clúster real para completarse (el `terraform apply`). Yo no tengo esas credenciales ni acceso desde este entorno, así que el código queda listo y validado sintácticamente, pero el `apply` te corresponde a vos correrlo cuando tengas tiempo/crédito de tu suscripción de estudiante. Avisame el resultado (o pegame el log si algo falla) y seguimos.
+
+## Fase 3 — Trivy bloqueante, SBOM y firma con Cosign en el pipeline
+
+**Qué se hizo:**
+
+En el job `build-and-push` de [`ci-cd.yml`](../.github/workflows/ci-cd.yml), el paso único "Build y push" se dividió en una secuencia de 10 pasos. Corre igual en `push` y en `pull_request` (antes, el build en PR solo validaba que el Dockerfile compilara; ahora además lo escanea):
+
+1. **Build local** (`push: false`, `load: true`): la imagen se construye y queda solo en el runner, nada se sube a GHCR todavía.
+2. **Trivy — reporte** (no bloqueante, `CRITICAL,HIGH`, JSON): se sube como artifact del run (`trivy-report-<servicio>`) pase lo que pase después — es la evidencia de "Reporte de Trivy" del enunciado.
+3. **Trivy — bloqueo** (`CRITICAL`, `exit-code: 1`): si la imagen tiene una vulnerabilidad crítica, este paso falla y **todo lo que sigue se salta automáticamente** (comportamiento por defecto de GitHub Actions ante un paso fallido) — no se genera SBOM, no se publica en GHCR, no se firma nada. Esto es lo que hace cumplir el criterio "Trivy bloqueante".
+4. **SBOM** (CycloneDX, vía Trivy): solo se llega acá si el paso anterior pasó. Se sube como artifact (`sbom-<servicio>`).
+5. **Publicar en GHCR**: recién acá se hace `docker push` de los tags ya construidos (no se reconstruye nada, se reutiliza la imagen del paso 1).
+6. **Cosign — instalar y firmar** (`cosign sign`, keyless vía OIDC de GitHub — sin manejar ninguna llave privada) + **adjuntar el SBOM** a la imagen firmada en GHCR (`cosign attach sbom`).
+
+Los pasos 5 y 6 mantienen la misma condición que ya existía (`if: github.event_name != 'pull_request'`): en un PR se escanea y se bloquea igual, pero nunca se publica ni se firma nada, porque todavía no hay nada que "promover".
+
+Para la firma keyless se agregó el permiso `id-token: write` al job (además de los `contents: read`/`packages: write` que ya tenía) — es lo que le permite a Cosign pedirle a GitHub un token OIDC de corta duración en vez de usar una llave privada guardada en un secret.
+
+**Validado, no solo escrito:**
+- `python3 -c "import yaml..."` → el archivo sigue siendo YAML válido.
+- [`actionlint`](https://github.com/rhysd/actionlint) (el linter dedicado de GitHub Actions, no solo YAML genérico) → cero errores: valida contextos, expresiones `if`, tipos de las referencias `steps.*.outputs.*`, etc.
+- Se verificó contra la API de GitHub que las versiones fijadas de las actions existen de verdad: `aquasecurity/trivy-action@v0.36.0` (el intento inicial, `@0.28.0` sin la `v`, no habría resuelto) y `sigstore/cosign-installer@v3`.
+- **No** se corrió el pipeline real (eso sí lo tenés que hacer vos disparando un push/PR); lo que sí se verificó es que la definición del workflow es válida y las dependencias externas existen.
+
+**Por qué:**
+
+El enunciado pide "Evidencia de seguridad: Reporte de Trivy, archivo SBOM y salida de verificación de firma con Cosign" y, por separado, "Bloqueo por vulnerabilidad crítica: URL directa al Pull Request bloqueado" e "Imagen firmada: Referencia completa registro/imagen:tag" en la tabla de enlaces obligatoria. Escanear *antes* de publicar (en vez de escanear la imagen ya publicada) es lo que hace que el bloqueo sea real: una imagen con una vulnerabilidad crítica **nunca llega a existir en GHCR**, no queda ahí "publicada pero marcada como insegura".
+
+**Nada de esto necesitó Azure ni ningún clúster** — corre íntegramente dentro de GitHub Actions. Para generar la evidencia real solo hace falta disparar el pipeline (push normal o un PR) desde `feature/Practica8`; no hay ninguna acción tuya pendiente relacionada con Azure en esta fase.

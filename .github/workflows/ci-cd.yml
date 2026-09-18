@@ -264,6 +264,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # requerido por cosign para firma "keyless" vía OIDC de GitHub
     strategy:
       fail-fast: false
       matrix:
@@ -312,15 +313,99 @@ jobs:
             type=sha,prefix=,format=short
             type=semver,pattern={{version}}
 
-      - name: Build y push
+      # Build local (push: false) para poder escanear la imagen ANTES de
+      # publicarla en GHCR. Nada se sube al registry todavía en este paso.
+      - name: Build (local, sin publicar)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Primer tag (referencia local para escanear/firmar)
+        id: tagref
+        run: |
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "tag=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+
+      # Reporte completo (CRITICAL+HIGH), nunca bloquea: es la evidencia de
+      # "Reporte de Trivy" que pide el enunciado, se sube como artifact aun
+      # si el escaneo bloqueante de abajo hace fallar el job.
+      - name: Trivy — generar reporte (no bloqueante)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: json
+          output: trivy-report-${{ matrix.name }}.json
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+      - name: Subir reporte de Trivy como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ matrix.name }}
+          path: trivy-report-${{ matrix.name }}.json
+          retention-days: 30
+
+      # Bloqueante: cualquier vulnerabilidad CRITICAL detiene el job antes
+      # de publicar nada en GHCR. Corre también en pull_request (ahí es
+      # donde la rúbrica pide evidencia de "PR bloqueado").
+      - name: Trivy — bloquear por vulnerabilidad crítica
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: false
+
+      # SBOM: solo se genera si la imagen pasó el escaneo bloqueante de
+      # arriba (no tiene sentido documentar el contenido de una imagen que
+      # ni siquiera se va a publicar).
+      - name: Generar SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: cyclonedx
+          output: sbom-${{ matrix.name }}.json
+
+      - name: Subir SBOM como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.json
+          retention-days: 30
+
+      - name: Publicar en GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+      - name: Instalar Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      # Firma "keyless": usa el OIDC token que GitHub Actions ya provee
+      # (permissions.id-token: write más arriba), sin manejar llaves
+      # privadas. La identidad firmante queda registrada en el log
+      # transparente público de Sigstore (Rekor).
+      - name: Firmar la imagen con Cosign
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}"
+          DIGEST="${{ steps.build.outputs.digest }}"
+          cosign sign "$IMAGE@$DIGEST"
+          cosign attach sbom --sbom sbom-${{ matrix.name }}.json "$IMAGE@$DIGEST"
+          echo "Imagen firmada: $IMAGE@$DIGEST"
 
   # ---------------------------------------------------------------------
   # Etapa 4: despliegue efímero en kind (Kubernetes in Docker). Corre
