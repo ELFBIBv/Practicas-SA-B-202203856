@@ -13,6 +13,14 @@ FROM node:20-alpine
 # Alpine (no cambia de versión mayor, solo actualiza paquetes del SO).
 RUN apk update && apk upgrade --no-cache
 
+# npm/npx/corepack no se usan en runtime (el CMD invoca "node" directo, ya
+# compilado). Se eliminan porque el npm que trae la imagen base incluye su
+# propia copia vendorizada de "tar" con una CVE crítica (apk no la puede
+# parchear: no es un paquete de Alpine, es parte de la distribución de
+# Node.js). Sacarlos de encima también reduce la superficie de ataque.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=builder --chown=appuser:appgroup /app/package.json /app/pnpm-lock.yaml ./
