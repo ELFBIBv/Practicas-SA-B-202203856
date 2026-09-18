@@ -1,0 +1,173 @@
+global:
+  environment: dev
+  storageClass: "standard"
+  commonLabels:
+    app.kubernetes.io/part-of: sa-platform
+  imagePullSecrets: []
+  logLevel: info
+  mysqlSecretName: ""
+  mongodbSecretName: ""
+  natsAuthSecretCreate: true
+  natsAuthSecretName: sa-platform-nats-auth
+
+mysql:
+  enabled: true
+  auth:
+    database: "sa_p5"
+    username: "user"
+    existingSecret: ""
+  persistence:
+    enabled: true
+    size: 2Gi
+
+mongodb:
+  enabled: true
+  auth:
+    database: "catalog_db"
+    username: "root"
+    existingSecret: ""
+  persistence:
+    enabled: true
+    size: 2Gi
+
+nats:
+  config:
+    cluster:
+      enabled: false
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          enabled: true
+          size: 2Gi
+          storageClassName: "standard"
+    merge:
+      authorization:
+        token: << $NATS_TOKEN >>
+  container:
+    env:
+      NATS_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: sa-platform-nats-auth
+            key: token
+
+api-gateway:
+  replicaCount: 2
+  image:
+    repository: api-gateway
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: true
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+auth:
+  replicaCount: 2
+  image:
+    repository: auth
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    nodeEnv: development
+    databaseUser: user
+    databaseName: auth_db
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+catalog:
+  replicaCount: 2
+  image:
+    repository: catalog
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+orders:
+  replicaCount: 2
+  image:
+    repository: orders
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    databaseUser: user
+    databaseName: orders_db
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notifications:
+  replicaCount: 2
+  image:
+    repository: notifications
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+cronjobs:
+  schedule1: "*/2 * * * *"
+  schedule2: "*/10 * * * *"
+  cron1:
+    image:
+      repository: cron1
+      tag: "v8.0.0"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  cron2:
+    image:
+      repository: cron2
+      tag: "v8.0.0"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+quota:
+  requestsCpu: "3"
+  requestsMemory: 4Gi
+  limitsCpu: "6"
+  limitsMemory: 8Gi

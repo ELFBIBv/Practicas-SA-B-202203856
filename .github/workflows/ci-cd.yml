@@ -1,4 +1,4 @@
-name: CI/CD - Plataforma de Microservicios (Practica 7)
+name: CI/CD - Plataforma de Microservicios (Practica 8)
 
 on:
   push:
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: "Ejecutar el despliegue a AKS (requiere secrets de Azure configurados)"
+        description: "Proponer el despliegue: abre un PR al repo GitOps con las imágenes recién publicadas (requiere GITOPS_PAT configurado). El pipeline ya NO aplica nada directo al clúster; ArgoCD es quien sincroniza tras el merge."
         type: boolean
         default: false
 
@@ -30,6 +30,9 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: elfbibv
+  BASELINE_IMAGE_TAG: v8.0.0
+  HEALTHY_CANARY_IMAGE_TAG: v8.0.1
+  FAULT_CANARY_IMAGE_TAG: v8.0.2
 
 jobs:
   # ---------------------------------------------------------------------
@@ -44,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/auth/auth-service
+        working-directory: P8/auth/auth-service
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +59,7 @@ jobs:
         with:
           node-version: "20"
           cache: pnpm
-          cache-dependency-path: P7/auth/auth-service/pnpm-lock.yaml
+          cache-dependency-path: P8/auth/auth-service/pnpm-lock.yaml
 
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
@@ -72,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/catalog/catalog-service
+        working-directory: P8/catalog/catalog-service
     services:
       mongo:
         image: mongo:6
@@ -90,7 +93,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/catalog/catalog-service/requirements-dev.txt
+          cache-dependency-path: P8/catalog/catalog-service/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -105,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/orders/order-service
+        working-directory: P8/orders/order-service
     services:
       mysql:
         image: mysql:8.0
@@ -126,11 +129,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/orders/order-service/requirements-dev.txt
+          cache-dependency-path: P8/orders/order-service/requirements-dev.txt
 
       - name: Aplicar el esquema de orders al MySQL de la CI
         run: mysql -h127.0.0.1 -uroot -proot orders_db_test < orders-db/init.sql
-        working-directory: P7/orders
+        working-directory: P8/orders
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -149,14 +152,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/notifications/notification-service
+        working-directory: P8/notifications/notification-service
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: P7/notifications/notification-service/go.mod
-          cache-dependency-path: P7/notifications/notification-service/go.sum
+          go-version-file: P8/notifications/notification-service/go.mod
+          cache-dependency-path: P8/notifications/notification-service/go.sum
 
       - name: Vet (análisis estático)
         run: go vet ./...
@@ -169,7 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/cronjobs/cron1
+        working-directory: P8/cronjobs/cron1
     services:
       mysql:
         image: mysql:8.0
@@ -190,7 +193,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/cronjobs/cron1/requirements-dev.txt
+          cache-dependency-path: P8/cronjobs/cron1/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -208,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: P7/cronjobs/cron2
+        working-directory: P8/cronjobs/cron2
     services:
       mysql:
         image: mysql:8.0
@@ -229,7 +232,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: P7/cronjobs/cron2/requirements-dev.txt
+          cache-dependency-path: P8/cronjobs/cron2/requirements-dev.txt
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
@@ -261,30 +264,31 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # requerido por cosign para firma "keyless" vía OIDC de GitHub
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: api-gateway
-            context: P7/api-gateway
+            context: P8/api-gateway
             image: sa-api-gateway
           - name: auth-service
-            context: P7/auth/auth-service
+            context: P8/auth/auth-service
             image: sa-auth-service
           - name: catalog-service
-            context: P7/catalog/catalog-service
+            context: P8/catalog/catalog-service
             image: sa-catalog-service
           - name: order-service
-            context: P7/orders/order-service
+            context: P8/orders/order-service
             image: sa-order-service
           - name: notification-service
-            context: P7/notifications/notification-service
+            context: P8/notifications/notification-service
             image: sa-notification-service
           - name: cron1
-            context: P7/cronjobs/cron1
+            context: P8/cronjobs/cron1
             image: sa-cron1
           - name: cron2
-            context: P7/cronjobs/cron2
+            context: P8/cronjobs/cron2
             image: sa-cron2
     steps:
       - uses: actions/checkout@v4
@@ -308,17 +312,100 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=,format=short
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build y push
+      # Build local (push: false) para poder escanear la imagen ANTES de
+      # publicarla en GHCR. Nada se sube al registry todavía en este paso.
+      - name: Build (local, sin publicar)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Primer tag (referencia local para escanear/firmar)
+        id: tagref
+        run: |
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "tag=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+
+      # Reporte completo (CRITICAL+HIGH), nunca bloquea: es la evidencia de
+      # "Reporte de Trivy" que pide el enunciado, se sube como artifact aun
+      # si el escaneo bloqueante de abajo hace fallar el job.
+      - name: Trivy — generar reporte (no bloqueante)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: json
+          output: trivy-report-${{ matrix.name }}.json
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+      - name: Subir reporte de Trivy como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ matrix.name }}
+          path: trivy-report-${{ matrix.name }}.json
+          retention-days: 30
+
+      # Bloqueante: cualquier vulnerabilidad CRITICAL detiene el job antes
+      # de publicar nada en GHCR. Corre también en pull_request (ahí es
+      # donde la rúbrica pide evidencia de "PR bloqueado").
+      - name: Trivy — bloquear por vulnerabilidad crítica
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: false
+
+      # SBOM: solo se genera si la imagen pasó el escaneo bloqueante de
+      # arriba (no tiene sentido documentar el contenido de una imagen que
+      # ni siquiera se va a publicar).
+      - name: Generar SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.tagref.outputs.tag }}
+          format: cyclonedx
+          output: sbom-${{ matrix.name }}.json
+
+      - name: Subir SBOM como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.json
+          retention-days: 30
+
+      - name: Publicar en GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+      - name: Instalar Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      # Firma "keyless": usa el OIDC token que GitHub Actions ya provee
+      # (permissions.id-token: write más arriba), sin manejar llaves
+      # privadas. La identidad firmante queda registrada en el log
+      # transparente público de Sigstore (Rekor).
+      - name: Firmar la imagen con Cosign
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}"
+          DIGEST="${{ steps.build.outputs.digest }}"
+          cosign sign "$IMAGE@$DIGEST"
+          cosign attach sbom --sbom sbom-${{ matrix.name }}.json "$IMAGE@$DIGEST"
+          echo "Imagen firmada: $IMAGE@$DIGEST"
 
   # ---------------------------------------------------------------------
   # Etapa 4: despliegue efímero en kind (Kubernetes in Docker). Corre
@@ -361,34 +448,146 @@ jobs:
           for plain in "${!IMAGES[@]}"; do
             ghcr_image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${IMAGES[$plain]}:${SHORT_SHA}"
             docker pull "$ghcr_image"
-            docker tag "$ghcr_image" "${plain}:latest"
+            docker tag "$ghcr_image" "${plain}:${BASELINE_IMAGE_TAG}"
           done
 
       - name: Crear clúster local con kind
         uses: helm/kind-action@v1
         with:
-          cluster_name: p7-kind
+          cluster_name: p8-kind
 
       - name: Cargar las imágenes al clúster de kind
         run: |
           for name in api-gateway auth catalog orders notifications cron1 cron2; do
-            kind load docker-image "${name}:latest" --name p7-kind
+            kind load docker-image "${name}:${BASELINE_IMAGE_TAG}" --name p8-kind
           done
 
       - uses: azure/setup-helm@v4
+        with:
+          # Helm 4 usa Server-Side Apply por defecto para releases nuevas.
+          # Fijamos la versión para que el pipeline no cambie sin revisión.
+          version: v4.3.0
+
+      - name: Instalar el controlador de Argo Rollouts
+        run: |
+          kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+          # --server-side evita el límite de 256 KB en la anotación
+          # last-applied-configuration que rompe con CRDs grandes como las
+          # de Argo Rollouts bajo un `kubectl apply` normal.
+          kubectl apply --server-side --force-conflicts -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+          kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+
+      - name: Instalar el plugin kubectl-argo-rollouts
+        run: |
+          curl -sSL -o kubectl-argo-rollouts https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+          chmod +x kubectl-argo-rollouts
+          sudo mv kubectl-argo-rollouts /usr/local/bin/kubectl-argo-rollouts
 
       - name: Preparar dependencias del chart
-        run: helm dependency update P7/charts/sa-platform
+        run: helm dependency update P8/charts/sa-platform
 
-      - name: Desplegar el chart en el clúster efímero
+      - name: Desplegar el baseline en el clúster efímero
         run: |
-          helm upgrade --install sa-platform P7/charts/sa-platform \
+          # Sin --wait: Helm intenta comprobar la salud del Rollout con un
+          # chequeo genérico (kstatus) que no entiende su esquema de status
+          # y se queda en "Unknown" hasta agotar el timeout. La espera real
+          # del Rollout se hace aparte con wait-for-rollout.sh; los demás
+          # recursos (Deployments/StatefulSets, que Helm sí reconoce) se
+          # esperan en el siguiente paso.
+          helm upgrade --install sa-platform P8/charts/sa-platform \
             --namespace sa-p5 \
             --create-namespace \
-            --values P7/charts/sa-platform/values.yaml \
-            --values P7/charts/sa-platform/values-dev.yaml \
-            --values P7/charts/sa-platform/values-kind.yaml \
-            --wait --timeout 5m
+            --server-side=false \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set-string api-gateway.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG" \
+            --timeout 5m
+
+      - name: Esperar a que los demás servicios (no el gateway) estén listos
+        run: |
+          for dep in $(kubectl get deployment -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "deployment/$dep" -n sa-p5 --timeout=180s
+          done
+          for sts in $(kubectl get statefulset -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "statefulset/$sts" -n sa-p5 --timeout=180s
+          done
+
+      - name: Esperar a que el Rollout inicial quede Healthy
+        run: bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+
+      # El primer `helm upgrade --install` no ejecuta pasos de canary (no hay
+      # ReplicaSet estable previo contra el cual comparar), así que para
+      # demostrar el canary real hay que publicar una segunda revisión.
+      - name: Construir versiones adicionales del gateway para el canary
+        run: |
+          docker build -t "api-gateway:${HEALTHY_CANARY_IMAGE_TAG}" \
+            --build-arg APP_VERSION="$HEALTHY_CANARY_IMAGE_TAG" --build-arg FAULT_MODE=false \
+            P8/api-gateway
+          docker build -t "api-gateway:${FAULT_CANARY_IMAGE_TAG}" \
+            --build-arg APP_VERSION="$FAULT_CANARY_IMAGE_TAG" --build-arg FAULT_MODE=true \
+            P8/api-gateway
+          kind load docker-image "api-gateway:${HEALTHY_CANARY_IMAGE_TAG}" --name p8-kind
+          kind load docker-image "api-gateway:${FAULT_CANARY_IMAGE_TAG}" --name p8-kind
+
+      - name: "Canary sano: publicar versión nueva y verificar promoción automática"
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
+            --namespace sa-p5 \
+            --server-side=false \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set-string api-gateway.image.tag="$HEALTHY_CANARY_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG"
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color
+
+      - name: "Fallo inducido: publicar versión defectuosa (FAULT_MODE=true)"
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
+            --namespace sa-p5 \
+            --server-side=false \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set-string api-gateway.image.tag="$FAULT_CANARY_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG"
+
+      - name: Verificar que el canary detecta el fallo y revierte automáticamente
+        run: |
+          verification_status=0
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Degraded 180 || verification_status=$?
+          echo "--- Evidencia: estado del Rollout tras el fallo inducido ---"
+          kubectl argo rollouts get rollout sa-platform-api-gateway -n sa-p5 --no-color || true
+          echo "--- Evidencia: AnalysisRuns y mediciones ---"
+          kubectl get analysisruns -n sa-p5 -o wide || true
+          kubectl get analysisruns -n sa-p5 -o yaml || true
+          echo "--- Evidencia: selectores de los Services estable y canary ---"
+          kubectl get service sa-platform-api-gateway-stable sa-platform-api-gateway-canary -n sa-p5 -o yaml || true
+          echo "--- Evidencia: endpoints actuales del Service canary ---"
+          kubectl get endpointslices -n sa-p5 \
+            -l kubernetes.io/service-name=sa-platform-api-gateway-canary \
+            -o yaml || true
+          echo "--- Evidencia: pods, imágenes y hashes del gateway ---"
+          kubectl get pods -n sa-p5 -l app.kubernetes.io/name=api-gateway -o wide --show-labels || true
+          exit "$verification_status"
 
       - name: Verificar el despliegue
         if: always()
@@ -396,79 +595,75 @@ jobs:
           kubectl get pods -n sa-p5 -o wide
           kubectl get pvc,svc -n sa-p5
           kubectl get cronjobs -n sa-p5
+          kubectl get rollout,analysistemplate -n sa-p5
 
       - name: Diagnóstico si algo falló
         if: failure()
         run: |
           kubectl describe pods -n sa-p5
           kubectl logs -n sa-p5 -l app.kubernetes.io/part-of=sa-platform --all-containers --tail=100 || true
+          kubectl describe rollout sa-platform-api-gateway -n sa-p5 || true
 
   # ---------------------------------------------------------------------
-  # Etapa 5: despliegue a AKS con Helm. NO se dispara con un push normal:
-  # solo corre si se lanza manualmente el workflow (workflow_dispatch) con
-  # el checkbox "deploy" activado, y solo llega a hacer algo si además
-  # existen los secrets/vars de Azure descritos en P7/README.md. Mientras
-  # esas condiciones no se cumplan, este job queda configurado pero
-  # inactivo, tal como se pidió para no gastar créditos de Azure.
+  # Etapa 5: promoción GitOps. Este job NO toca el clúster de AKS bajo
+  # ninguna circunstancia (nada de az login, kubectl ni helm upgrade aquí).
+  # Su única responsabilidad es sincronizar el chart de Helm hacia el
+  # repositorio GitOps (https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops),
+  # actualizar el tag de imagen al commit recién publicado en GHCR, y abrir
+  # un Pull Request ahí. Quien aplica el cambio al clúster es ArgoCD,
+  # corriendo dentro del propio AKS, cuando ese PR se mergea a main.
+  # Solo corre si se lanza manualmente el workflow (workflow_dispatch) con
+  # el checkbox "deploy" activado, y solo si existe el secret GITOPS_PAT
+  # descrito en P8/README.md.
   # ---------------------------------------------------------------------
-  deploy-to-aks:
-    name: "Deploy a AKS (manual)"
+  promote-to-gitops:
+    name: "Proponer despliegue (PR al repo GitOps)"
     needs: build-and-push
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true'
     runs-on: ubuntu-latest
-    environment: production-aks
     env:
-      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-      AKS_CLUSTER: ${{ vars.AZURE_AKS_CLUSTER }}
-      NAMESPACE: sa-p5
-      RELEASE: sa-platform
+      GITOPS_REPO: ELFBIBv/Practicas-SA-B-202203856-gitops
+      GH_TOKEN: ${{ secrets.GITOPS_PAT }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Login en Azure
-        uses: azure/login@v2
+      - name: Checkout del repo de código (fuente del chart)
+        uses: actions/checkout@v4
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          path: source
 
-      - name: Obtener credenciales del cluster AKS
+      - name: Clonar el repositorio GitOps
         run: |
-          az aks get-credentials \
-            --resource-group "$RESOURCE_GROUP" \
-            --name "$AKS_CLUSTER" \
-            --overwrite-existing
+          git clone "https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git" gitops
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
 
-      - uses: azure/setup-helm@v4
-
-      - name: Actualizar dependencias del chart
-        run: helm dependency update P7/charts/sa-platform
-
-      - name: Asegurar namespace e imagePullSecret de GHCR
+      - name: Sincronizar el chart de Helm hacia el repo GitOps
         run: |
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret docker-registry ghcr-secret \
-            --namespace "$NAMESPACE" \
-            --docker-server=ghcr.io \
-            --docker-username="${{ github.repository_owner }}" \
-            --docker-password="${{ secrets.GHCR_PAT }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+          rsync -a --delete \
+            --exclude 'charts/*.tgz' \
+            source/P8/charts/sa-platform/ gitops/charts/sa-platform/
 
-      - name: Desplegar con Helm
+      - name: Actualizar el tag de imagen al commit recién publicado
         run: |
+          python3 source/P8/scripts/bump-image-tag.py \
+            gitops/charts/sa-platform/values-azure.yaml \
+            "${GITHUB_SHA:0:7}"
+
+      - name: Abrir Pull Request en el repo GitOps
+        run: |
+          cd gitops
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          helm upgrade --install "$RELEASE" P7/charts/sa-platform \
-            --namespace "$NAMESPACE" \
-            --create-namespace \
-            --values P7/charts/sa-platform/values-azure.yaml \
-            --set api-gateway.image.tag="$SHORT_SHA" \
-            --set auth.image.tag="$SHORT_SHA" \
-            --set catalog.image.tag="$SHORT_SHA" \
-            --set orders.image.tag="$SHORT_SHA" \
-            --set notifications.image.tag="$SHORT_SHA" \
-            --set cronjobs.cron1.image.tag="$SHORT_SHA" \
-            --set cronjobs.cron2.image.tag="$SHORT_SHA" \
-            --wait --timeout 10m
-
-      - name: Verificar despliegue
-        run: |
-          kubectl get pods -n "$NAMESPACE"
-          kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
+          BRANCH="promote/${SHORT_SHA}"
+          git config user.name "sa-platform-ci"
+          git config user.email "ci@sa-platform.local"
+          git checkout -b "$BRANCH"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Sin cambios que promover (el chart y los tags ya están al día)."
+            exit 0
+          fi
+          git commit -m "deploy: promover sa-platform a ${SHORT_SHA}"
+          git push origin "$BRANCH"
+          gh pr create --repo "$GITOPS_REPO" \
+            --title "Promover sa-platform a ${SHORT_SHA}" \
+            --body "Generado automáticamente por el pipeline de CI del repo de código en el commit ${{ github.sha }}. ArgoCD debe sincronizar este cambio al hacer merge." \
+            --base main --head "$BRANCH"

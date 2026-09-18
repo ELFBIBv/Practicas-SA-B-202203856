@@ -1,0 +1,81 @@
+global:
+  environment: dev
+  storageClass: standard
+  logLevel: debug
+  security:
+    allowInsecureImages: true
+
+mysql:
+  enabled: true
+
+nats:
+  config:
+    jetstream:
+      enabled: true
+  container:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  reloader:
+    merge:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+  natsBox:
+    enabled: false
+
+api-gateway:
+  replicaCount: 2
+  image:
+    tag: "v8.0.0"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+auth:
+  replicaCount: 2
+  image:
+    tag: "v8.0.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+catalog:
+  replicaCount: 2
+  image:
+    tag: "v8.0.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+orders:
+  replicaCount: 2
+  image:
+    tag: "v8.0.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+notifications:
+  replicaCount: 2
+  image:
+    tag: "v8.0.0"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi

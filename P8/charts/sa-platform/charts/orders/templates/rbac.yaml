@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "orders.serviceAccountName" . }}
+  labels:
+    {{- include "orders.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "orders.fullname" . }}-role
+  labels:
+    {{- include "orders.labels" . | nindent 4 }}
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "orders.fullname" . }}-rolebinding
+  labels:
+    {{- include "orders.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "orders.serviceAccountName" . }}
+roleRef:
+  kind: Role
+  name: {{ include "orders.fullname" . }}-role
+  apiGroup: rbac.authorization.k8s.io

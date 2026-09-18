@@ -1,0 +1,121 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  progressDeadlineAbort: true
+  strategy:
+    canary:
+      stableService: {{ include "api-gateway.fullname" . }}-stable
+      canaryService: {{ include "api-gateway.fullname" . }}-canary
+      maxUnavailable: 0
+      maxSurge: 1
+      abortScaleDownDelaySeconds: 30
+      steps:
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
+        - setWeight: 80
+        - analysis:
+            templates:
+              - templateName: {{ include "api-gateway.fullname" . }}-health
+            args:
+              - name: candidate-url
+                value: http://{{ include "api-gateway.fullname" . }}-canary.{{ .Release.Namespace }}.svc.cluster.local
+              - name: expected-version
+                value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+        - pause:
+            duration: {{ .Values.rollout.pauseDuration }}
+  selector:
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "api-gateway.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
+        runAsUser: 10001
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "api-gateway.fullname" . }}-config
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}

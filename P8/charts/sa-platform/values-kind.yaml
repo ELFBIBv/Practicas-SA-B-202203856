@@ -1,0 +1,30 @@
+# Valores para el despliegue efímero de CI en kind (Kubernetes in Docker).
+# Se usa junto con values.yaml + values-dev.yaml: helm upgrade --install ...
+#   -f values.yaml -f values-dev.yaml -f values-kind.yaml
+#
+# Objetivo: que el runner de GitHub Actions (2 vCPU / ~7GB RAM) pueda levantar
+# todo el stack sin quedarse sin recursos, probando el chart real sin ninguna
+# nube ni imágenes publicadas (se cargan en local con `kind load docker-image`).
+api-gateway:
+  # Dos réplicas reducen consumo; kind solo valida recursos, no porcentajes exactos.
+  replicaCount: 2
+  rollout:
+    pauseDuration: 5s
+  analysis:
+    interval: 2s
+    count: 3
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+auth:
+  replicaCount: 1
+
+catalog:
+  replicaCount: 1
+
+orders:
+  replicaCount: 1
+
+notifications:
+  replicaCount: 1

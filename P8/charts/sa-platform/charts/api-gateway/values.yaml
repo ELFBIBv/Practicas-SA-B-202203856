@@ -1,0 +1,40 @@
+replicaCount: 5
+image:
+  repository: ghcr.io/elfbibv/sa-api-gateway
+  pullPolicy: IfNotPresent
+  tag: "v8.0.0"
+serviceAccount:
+  create: true
+  name: ""
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: true
+rollout:
+  pauseDuration: 30s
+analysis:
+  interval: 10s
+  count: 3
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+global:
+  environment: dev
+  logLevel: info
+  imagePullSecrets: []
