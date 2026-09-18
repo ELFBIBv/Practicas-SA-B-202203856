@@ -29,6 +29,7 @@ El enunciado prohíbe el despliegue directo desde el pipeline: "prohibición de 
 
 **Acción manual requerida (no puedo hacerla yo):** para que el job `promote-to-gitops` funcione, hace falta crear el secret `GITOPS_PAT` en el repo de código, un Personal Access Token (classic) con scope `repo` que tenga permiso de escritura sobre `Practicas-SA-B-202203856-gitops`. Pasos:
 
+
 ```bash
 # GitHub → Settings (de tu cuenta) → Developer settings → Personal access tokens →
 # Tokens (classic) → Generate new token, con el scope "repo" completo.
