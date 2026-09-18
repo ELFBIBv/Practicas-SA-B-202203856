@@ -2,7 +2,7 @@
 
 Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P8/api-gateway`, `P8/auth`, `P8/catalog`, `P8/orders`, `P8/notifications`, `P8/cronjobs` y sobre el chart de Helm en `P8/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
 
-> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7. Lo que ya está implementado (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)): se eliminó el flujo de despliegue directo, el código de Terraform (namespace, cuotas, límites, RBAC) existe en [`P8/terraform/`](terraform/), y el pipeline ahora escanea con Trivy (bloqueante ante `CRITICAL`), genera SBOM y firma con Cosign antes de publicar cualquier imagen en GHCR. Pendiente: correr `terraform apply` contra un AKS real, instalar ArgoCD, Kyverno, pruebas de carga, y completar la tabla de enlaces obligatoria abajo (todavía marcada `PENDIENTE`) con evidencia real de una corrida del pipeline.
+> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7. Lo que ya está implementado (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)): se eliminó el flujo de despliegue directo; el código de Terraform (namespace, cuotas, límites, RBAC) existe en [`P8/terraform/`](terraform/); el pipeline escanea con Trivy (bloqueante ante `CRITICAL`), genera SBOM y firma con Cosign antes de publicar cualquier imagen en GHCR; 3 políticas de admisión de Kyverno en [`P8/kyverno/policies/`](kyverno/policies/), probadas contra un `kind` local; y una prueba de carga con k6 en [`P8/loadtest/`](loadtest/), también probada contra el stack real. Pendiente: correr `terraform apply` contra un AKS real, instalar ArgoCD y Kyverno ahí, Sealed Secrets, informe de incidente, diagrama, video, y completar la tabla de enlaces obligatoria abajo con evidencia real de una corrida del pipeline en AKS.
 
 ## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
 
@@ -15,7 +15,7 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | Despliegue rechazado por política | PENDIENTE |
 | Bloqueo por vulnerabilidad crítica | PR bloqueado: https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1 — job fallido (3 CVE CRITICAL en `api-gateway`, ver también otros 5 servicios bloqueados en el mismo PR): https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35315634021/job/105506751987?pr=1 |
 | Imagen firmada | PENDIENTE |
-| Reporte de prueba de carga | PENDIENTE |
+| Reporte de prueba de carga | Script: [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js). El reporte de cada corrida se sube como artifact del job `load-test` en cada ejecución del pipeline (PENDIENTE enlazar el de una corrida real). |
 | Video demostrativo | PENDIENTE |
 
 ## Estado actual

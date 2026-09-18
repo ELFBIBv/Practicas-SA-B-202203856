@@ -147,3 +147,51 @@ Al subir el fix de la Fase 3.2, el job "Test: order-service" empezó a fallar en
 **Verificado, no solo escrito:** se levantó un MySQL real en Docker (mismo esquema que usa CI, `orders-db/init.sql`), se instaló el `requirements.txt` completo con `httpx==0.27.2` en un venv limpio, y se corrieron los 3 tests de `tests/test_main.py` de punta a punta: **3 passed**. Se reconstruyó además la imagen de Docker completa y se volvió a escanear con Trivy real: sigue en **0 CRITICAL** (confirmado parseando el JSON).
 
 **Lección para las próximas veces:** al subir una dependencia solo para resolver una CVE, conviene subir al **mínimo** que resuelve el problema, no al último release disponible — saltos más grandes traen más riesgo de romper compatibilidad con el resto del código (en este caso, con una versión vieja de Starlette que ningún commit de esta fase tocó). Y, sobre todo: verificar corriendo los tests reales, no solo instalando las dependencias — el venv sin tests habría dejado pasar este error igual.
+
+## Fase 4 — Kyverno: 3 políticas de admisión
+
+**Qué se hizo:**
+
+Se agregó [`P8/kyverno/policies/`](kyverno/policies/) con 3 `ClusterPolicy`:
+
+1. **`restrict-image-registries`**: solo permite imágenes de `ghcr.io/elfbibv/*`. Rechaza cualquier cosa de Docker Hub, de otro registry o de otro owner de GHCR.
+2. **`require-non-root-user`**: exige `runAsNonRoot: true` (a nivel de pod o de contenedor). Formaliza como regla del clúster algo que todos los Dockerfile del proyecto ya hacían por convención (`USER 10001`).
+3. **`verify-image-signatures`**: usa la función `verifyImages` de Kyverno para exigir que la imagen esté firmada con Cosign en modo keyless por el propio workflow de CI (mismo mecanismo de la Fase 3), verificando contra el log público de Sigstore (Rekor). Es la política que más directamente conecta con lo que ya existía: sin esto, firmar las imágenes en el pipeline sería un ejercicio sin consecuencias — con esto, el clúster efectivamente exige esa firma antes de correr nada.
+
+En `ci-cd.yml` se agregó el job `kyverno-policy-check` (corre en paralelo a `deploy-kind`, en su propio clúster kind independiente para no arriesgar ese job ya probado). Instala Kyverno vía Helm, aplica las 3 políticas, e intenta desplegar dos pods deliberadamente no conformes:
+- `nginx:latest` (Docker Hub, corre como root) → debe rechazarlo `restrict-image-registries` + `require-non-root-user`.
+- Una imagen propia (`ghcr.io/elfbibv/...`) pero sin `runAsNonRoot` y sin que Kyverno pueda verificar su firma en ese clúster efímero → debe rechazarla `require-non-root-user` y/o `verify-image-signatures`.
+
+El job falla explícitamente (`exit 1`) si alguno de los dos pods **no** es rechazado — no es un test cosmético, si las políticas dejaran de funcionar el job se pone rojo.
+
+**Validado en vivo, no solo escrito:** se instaló Kyverno de verdad en un clúster `kind` local (mismo mecanismo que usará CI) y se probaron las 3 políticas a mano:
+- `kubectl run ... --image=nginx:latest` → rechazado en el acto por `restrict-image-registries` **y** `require-non-root-user` simultáneamente (mensaje de error real capturado, ver conversación).
+- Se confirmó que `verify-image-signatures` **sí se activa** y evalúa imágenes de `ghcr.io/elfbibv/*`: al intentar verificar una imagen real y firmada (`sa-notification-service:9d19481`, ya publicada por el PR #1), Kyverno la rechazó porque no pudo autenticarse contra GHCR para leer la firma — comportamiento correcto y seguro por defecto (falla cerrado, no abierto). Se intentó además cablear credenciales de registry a Kyverno (`admissionController.extraArgs: --imagePullSecrets=regcred`) para probar el camino "permitido" completo, pero no se pudo cerrar el ciclo end-to-end porque el token usado tampoco tenía scope `read:packages` real — limitación del entorno de prueba, no de la política.
+
+**Qué queda pendiente:** el camino "permitido" de `verify-image-signatures` (una imagen firmada que Kyverno logra verificar con éxito) todavía no se demostró de punta a punta. Se va a validar naturalmente cuando Kyverno se instale en el AKS real (Fase futura), donde sí va a existir un `imagePullSecret` con credenciales de lectura reales sobre GHCR (el mismo `ghcr-secret` que ya usa el chart de Helm). Mientras tanto, lo que sí quedó demostrado — y es el requisito eliminatorio real — es que las 3 políticas están activas y bloquean correctamente lo que no cumple.
+
+**Por qué:**
+
+El enunciado pide 3 políticas de admisión con "evidencia de un despliegue rechazado". Elegí estas 3 específicamente porque cada una cierra un círculo con algo que ya existía en fases anteriores: la restricción de registry y la verificación de firma le dan sentido real al escaneo de Trivy y a la firma de Cosign de la Fase 3 (de nada sirve escanear y firmar en el pipeline si el clúster no exige después que lo que llegue haya pasado por ese pipeline), y el requisito de usuario no-root formaliza una convención que ya estaba en el código pero que hasta ahora nadie forzaba.
+
+**Nada de esto necesitó Azure** — se escribió y se probó íntegramente con un `kind` local. El job de CI tampoco lo necesita.
+
+## Fase 5 — Prueba de carga con k6
+
+**Qué se hizo:**
+
+Se agregó [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js): una prueba de carga contra el API Gateway con un perfil de 3 etapas (calentamiento 5→carga sostenida 20 VUs→enfriamiento), que ejercita `GET /health`, `POST /api/catalog/graphql` (`{ products { ... } }`) y `POST /api/orders/graphql` (`{ orders { ... } }`) — las mismas rutas que ya expone `nginx.conf` del gateway real. Umbrales: menos de 1% de requests fallidos y p95 de latencia bajo 500ms.
+
+En `ci-cd.yml` se agregó el job `load-test`: despliega un baseline propio en su propio clúster `kind` (independiente de `deploy-kind`, mismo motivo de aislamiento que Kyverno), expone el gateway con `kubectl port-forward`, y corre k6 contra él. El reporte (`--summary-export`) se sube como artifact.
+
+**Validado en vivo contra el stack real, no contra un mock — y encontré 3 problemas reales en el camino:**
+
+1. **El primer intento del propio script tenía un bug de verificación:** los `check()` solo miraban el status HTTP (`r.status === 200`). GraphQL devuelve **200 incluso cuando el resolver falla** (el error queda en el campo `errors` del body). Se comprobó a mano: con MySQL todavía no listo, `orders/graphql` devolvía `{"data": null, "errors": [...]}"` con status 200, y el check original lo daba por bueno igual. Fix: se agregó `!JSON.parse(r.body).errors` a cada check, y se probó explícitamente en ambas direcciones (con un body de error y uno sano) para confirmar que ahora sí distingue los dos casos.
+2. **Los `check()` fallidos, por sí solos, no hacen fallar a k6** — solo quedan reportados, a menos que haya un threshold sobre la métrica `checks`. Se agregó `checks: ['rate>0.99']` a `thresholds`; sin este agregado, el bug del punto 1 hubiera sido invisible incluso después de corregir los checks.
+3. **El job de CI tenía el mismo hueco que casi todos los anteriores: faltaba esperar a que los StatefulSets (MySQL/MongoDB/NATS) estuvieran listos antes de medir**, algo que `deploy-kind` sí hace. Comprobado desplegando el chart real en un `kind` local con las 7 imágenes reconstruidas: sin ese wait, la primera consulta a MySQL tardaba tanto en conectar que el p95 de la corrida llegó a **30 segundos** (vs. el umbral de 500ms), y `orders/graphql` literalmente no podía conectarse a la base. Con el wait agregado, mismo clúster, misma carga: p95 bajó a **15ms**, 500/500 checks en verde. Se agregó el loop de `kubectl rollout status statefulset/...` que le faltaba al job.
+
+**Por qué:**
+
+El enunciado pide "Pruebas automatizadas: scripts de humo, integración y carga, con sus reportes de ejecución" y, en la tabla de enlaces obligatoria, la ruta del archivo del reporte dentro del repositorio. La ruta del script queda documentada acá; el reporte de cada corrida (que cambia cada vez) se sube como artifact del run de CI, igual que se hizo con los reportes de Trivy y el SBOM en la Fase 3 — no tiene sentido versionar un archivo que se regenera en cada ejecución.
+
+**Nada de esto necesitó Azure** — se escribió y se probó íntegramente contra un `kind` local con el chart real desplegado. El job de CI tampoco lo necesita.

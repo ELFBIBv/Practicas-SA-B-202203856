@@ -2,3 +2,7 @@
 charts/sa-platform/charts/*.tgz
 charts/sa-platform/charts/nats/
 charts/sa-platform/charts/redis/
+
+# Reporte de la prueba de carga (k6): se regenera en cada corrida, no se
+# versiona — la evidencia real queda como artifact del run de CI.
+loadtest/reporte-*.json

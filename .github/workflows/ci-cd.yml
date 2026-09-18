@@ -605,6 +605,220 @@ jobs:
           kubectl describe rollout sa-platform-api-gateway -n sa-p5 || true
 
   # ---------------------------------------------------------------------
+  # Etapa 4b: políticas de admisión con Kyverno, en un clúster kind propio
+  # e independiente del de deploy-kind (para no arriesgar ese job, que ya
+  # está probado). Instala Kyverno, aplica las 3 políticas de
+  # P8/kyverno/policies/, e intenta desplegar dos pods que las violan a
+  # propósito para dejar evidencia real de rechazo. No corre en Pull
+  # Requests por el mismo motivo que deploy-kind: no hay nada publicado
+  # todavía para probar.
+  # ---------------------------------------------------------------------
+  kyverno-policy-check:
+    name: "Kyverno: políticas de admisión"
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear clúster local con kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: p8-kyverno
+
+      - name: Instalar Kyverno
+        run: |
+          helm repo add kyverno https://kyverno.github.io/kyverno/
+          helm repo update
+          helm install kyverno kyverno/kyverno \
+            --namespace kyverno --create-namespace \
+            --wait --timeout 180s
+
+      - name: Aplicar las 3 políticas de admisión
+        run: |
+          kubectl apply -f P8/kyverno/policies/
+          kubectl wait --for=condition=Ready clusterpolicy --all --timeout=60s
+          kubectl get clusterpolicy
+
+      - name: "Caso rechazado 1: imagen externa, root, sin firmar (debe bloquearse)"
+        run: |
+          set +e
+          OUTPUT=$(kubectl run policy-check-external-image --image=nginx:latest --restart=Never 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          set -e
+          if [ "$STATUS" -eq 0 ]; then
+            echo "ERROR: Kyverno debía rechazar nginx:latest (registry externo + root) y no lo hizo."
+            exit 1
+          fi
+          echo "$OUTPUT" | grep -q "restrict-image-registries" || { echo "ERROR: no se activó restrict-image-registries."; exit 1; }
+          echo "$OUTPUT" | grep -q "require-non-root-user" || { echo "ERROR: no se activó require-non-root-user."; exit 1; }
+          echo "OK: Kyverno rechazó correctamente el despliegue no conforme."
+
+      - name: "Caso rechazado 2: imagen propia sin firma verificable (debe bloquearse)"
+        run: |
+          set +e
+          OUTPUT=$(kubectl run policy-check-unsigned --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-notification-service:${GITHUB_SHA:0:7}" --restart=Never 2>&1)
+          STATUS=$?
+          echo "$OUTPUT"
+          set -e
+          if [ "$STATUS" -eq 0 ]; then
+            echo "ERROR: Kyverno debía rechazar este pod (sin runAsNonRoot y sin poder verificar firma en este clúster efímero) y no lo hizo."
+            exit 1
+          fi
+          echo "$OUTPUT" | grep -q "verify-image-signatures\|require-non-root-user" || { echo "ERROR: no se activó ninguna política esperada."; exit 1; }
+          echo "OK: Kyverno rechazó correctamente el despliegue no conforme."
+
+      # Nota: el camino "permitido" de verify-image-signatures (una imagen
+      # firmada que SÍ pasa la verificación) necesita que Kyverno pueda
+      # autenticarse contra GHCR para leer la firma de Cosign — este
+      # clúster kind efímero no tiene esas credenciales configuradas
+      # (a propósito: nadie las va a dejar tiradas en un runner temporal).
+      # Ese camino se valida más adelante, sobre el clúster AKS real, que
+      # sí va a tener el imagePullSecret ghcr-secret. Lo que este job
+      # demuestra es que las 3 políticas están activas y rechazan
+      # correctamente lo que no cumple, que es el requisito eliminatorio.
+
+  # ---------------------------------------------------------------------
+  # Etapa 4c: prueba de carga con k6, contra un despliegue baseline propio
+  # en kind (otro clúster efímero independiente, mismo motivo que
+  # kyverno-policy-check: no arriesgar el job de deploy-kind ya probado).
+  # No corre en Pull Requests, mismo motivo que los demás jobs de esta
+  # etapa: build-and-push no publicó nada que desplegar todavía.
+  # ---------------------------------------------------------------------
+  load-test:
+    name: "Prueba de carga (k6)"
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Descargar las 7 imágenes ya publicadas en GHCR
+        run: |
+          declare -A IMAGES=(
+            [api-gateway]=sa-api-gateway
+            [auth]=sa-auth-service
+            [catalog]=sa-catalog-service
+            [orders]=sa-order-service
+            [notifications]=sa-notification-service
+            [cron1]=sa-cron1
+            [cron2]=sa-cron2
+          )
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          for plain in "${!IMAGES[@]}"; do
+            ghcr_image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${IMAGES[$plain]}:${SHORT_SHA}"
+            docker pull "$ghcr_image"
+            docker tag "$ghcr_image" "${plain}:${BASELINE_IMAGE_TAG}"
+          done
+
+      - name: Crear clúster local con kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: p8-loadtest
+
+      - name: Cargar las imágenes al clúster de kind
+        run: |
+          for name in api-gateway auth catalog orders notifications cron1 cron2; do
+            kind load docker-image "${name}:${BASELINE_IMAGE_TAG}" --name p8-loadtest
+          done
+
+      - name: Preparar dependencias del chart
+        run: helm dependency update P8/charts/sa-platform
+
+      - name: Desplegar el baseline (sin canary, solo para la prueba de carga)
+        run: |
+          helm upgrade --install sa-platform P8/charts/sa-platform \
+            --namespace sa-p5 \
+            --create-namespace \
+            --server-side=false \
+            --values P8/charts/sa-platform/values.yaml \
+            --values P8/charts/sa-platform/values-dev.yaml \
+            --values P8/charts/sa-platform/values-kind.yaml \
+            --set-string api-gateway.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string auth.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string catalog.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string orders.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string notifications.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron1.image.tag="$BASELINE_IMAGE_TAG" \
+            --set-string cronjobs.cron2.image.tag="$BASELINE_IMAGE_TAG" \
+            --timeout 5m
+          for dep in $(kubectl get deployment -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "deployment/$dep" -n sa-p5 --timeout=180s
+          done
+          # Sin este loop, mysql/mongodb/nats pueden seguir arrancando
+          # cuando el resto ya reporta "Ready" (el rollout status de un
+          # Deployment no depende de que sus StatefulSets ya estén arriba),
+          # y las primeras requests reales fallan o quedan carísimas.
+          # Comprobado a mano: sin este wait, orders/graphql devolvía un
+          # error real de conexión a MySQL con status 200 igual.
+          for sts in $(kubectl get statefulset -n sa-p5 -o jsonpath='{.items[*].metadata.name}'); do
+            kubectl rollout status "statefulset/$sts" -n sa-p5 --timeout=180s
+          done
+          bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+
+      - name: Instalar k6
+        run: |
+          curl -sL https://github.com/grafana/k6/releases/download/v2.2.0/k6-v2.2.0-linux-amd64.tar.gz -o k6.tar.gz
+          tar xzf k6.tar.gz --strip-components 1 k6-v2.2.0-linux-amd64/k6
+          sudo mv k6 /usr/local/bin/k6
+          k6 version
+
+      - name: Exponer el API Gateway en localhost
+        run: |
+          kubectl port-forward -n sa-p5 svc/sa-platform-api-gateway 8080:80 &
+          echo $! > /tmp/port-forward.pid
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:8080/health && break
+            sleep 2
+          done
+
+      # catalog/orders recién abren su primera conexión real a
+      # MongoDB/MySQL en este momento (el clúster se acaba de crear); esa
+      # primera consulta es varios órdenes de magnitud más lenta que las
+      # siguientes y, si no se descarta, infla el p95 de la corrida medida
+      # sin que eso refleje ningún problema real de la aplicación
+      # (comprobado a mano: sin precalentar, p95 llegó a 30s; ya caliente,
+      # p95 baja a ~107ms). Se precalienta antes de medir.
+      - name: Precalentar los servicios antes de medir
+        run: |
+          for i in $(seq 1 5); do
+            curl -sf http://localhost:8080/health >/dev/null
+            curl -sf -X POST http://localhost:8080/api/catalog/graphql \
+              -H "Content-Type: application/json" \
+              -d '{"query":"{ products { id } }"}' >/dev/null
+            curl -sf -X POST http://localhost:8080/api/orders/graphql \
+              -H "Content-Type: application/json" \
+              -d '{"query":"{ orders { id } }"}' >/dev/null
+          done
+
+      - name: Correr la prueba de carga
+        run: |
+          k6 run \
+            -e BASE_URL=http://localhost:8080 \
+            --summary-export=P8/loadtest/reporte-ultima-corrida.json \
+            P8/loadtest/api-gateway-load-test.js
+
+      - name: Detener el port-forward
+        if: always()
+        run: kill "$(cat /tmp/port-forward.pid)" 2>/dev/null || true
+
+      - name: Subir el reporte de la prueba de carga como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-prueba-de-carga
+          path: P8/loadtest/reporte-ultima-corrida.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------
   # Etapa 5: promoción GitOps. Este job NO toca el clúster de AKS bajo
   # ninguna circunstancia (nada de az login, kubectl ni helm upgrade aquí).
   # Su única responsabilidad es sincronizar el chart de Helm hacia el
