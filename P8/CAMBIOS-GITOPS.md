@@ -137,3 +137,13 @@ Al abrir el [PR #1](https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1) 
 - Antes de tocar `httpx`, se revisó el uso real en el código (`main.py`): solo `httpx.post(...)` y `httpx.RequestError`, API estable entre 0.25 y 0.28 — sin riesgo de romper nada.
 
 **Lección para las próximas veces:** un `apk upgrade`/`apt-get upgrade` solo cubre paquetes del sistema operativo. Las vulnerabilidades en dependencias de la aplicación (`pip`, `npm`) o en herramientas empaquetadas dentro de la imagen base (como `npm` trayendo su propio `tar`) necesitan su propio fix, caso por caso — no hay un único comando que las resuelva todas.
+
+### Fase 3.3 — El fix de `httpx` de la 3.2 rompió los tests de `order-service`
+
+Al subir el fix de la Fase 3.2, el job "Test: order-service" empezó a fallar en la *colección* de tests (antes de llegar a ejecutar ninguno): `TypeError: Client.__init__() got an unexpected keyword argument 'app'` en `TestClient(main.app)`. Causa: `httpx==0.28.1` **eliminó por completo** el parámetro de compatibilidad `app=` que versiones viejas de Starlette (la que trae `fastapi==0.103.1`, ya bastante desactualizado) usan internamente para construir `TestClient`. No es un problema del fix de seguridad en sí — es que el salto de versión (`0.25.0` → `0.28.1`) fue más grande del necesario.
+
+**Fix:** en vez de `httpx==0.28.1`, se bajó a `httpx==0.27.2` — la última versión de la serie 0.27, donde ese parámetro todavía existe (con warning de deprecación, pero funciona) y que **ya resuelve `h11` a `0.16.0`** igual que 0.28.1 (probado explícitamente: `httpx==0.26.0`, `0.27.0` y `0.27.2` resuelven `h11` a la misma versión parcheada; el salto más grande a 0.28 no aportaba nada extra en materia de seguridad, solo rompía compatibilidad).
+
+**Verificado, no solo escrito:** se levantó un MySQL real en Docker (mismo esquema que usa CI, `orders-db/init.sql`), se instaló el `requirements.txt` completo con `httpx==0.27.2` en un venv limpio, y se corrieron los 3 tests de `tests/test_main.py` de punta a punta: **3 passed**. Se reconstruyó además la imagen de Docker completa y se volvió a escanear con Trivy real: sigue en **0 CRITICAL** (confirmado parseando el JSON).
+
+**Lección para las próximas veces:** al subir una dependencia solo para resolver una CVE, conviene subir al **mínimo** que resuelve el problema, no al último release disponible — saltos más grandes traen más riesgo de romper compatibilidad con el resto del código (en este caso, con una versión vieja de Starlette que ningún commit de esta fase tocó). Y, sobre todo: verificar corriendo los tests reales, no solo instalando las dependencias — el venv sin tests habría dejado pasar este error igual.
