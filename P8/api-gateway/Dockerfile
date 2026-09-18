@@ -1,5 +1,9 @@
 FROM nginx:1.29.1-alpine
 
+# Trae los parches de seguridad ya publicados para esta misma versión de
+# Alpine (no cambia de versión mayor, solo actualiza paquetes del SO).
+RUN apk update && apk upgrade --no-cache
+
 ARG APP_VERSION=0.0.0-dev
 ARG FAULT_MODE=false
 

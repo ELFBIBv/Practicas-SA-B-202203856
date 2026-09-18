@@ -29,6 +29,7 @@ El enunciado prohíbe el despliegue directo desde el pipeline: "prohibición de 
 
 **Acción manual requerida (no puedo hacerla yo):** para que el job `promote-to-gitops` funcione, hace falta crear el secret `GITOPS_PAT` en el repo de código, un Personal Access Token (classic) con scope `repo` que tenga permiso de escritura sobre `Practicas-SA-B-202203856-gitops`. Pasos:
 
+
 ```bash
 # GitHub → Settings (de tu cuenta) → Developer settings → Personal access tokens →
 # Tokens (classic) → Generate new token, con el scope "repo" completo.
@@ -112,3 +113,37 @@ Para la firma keyless se agregó el permiso `id-token: write` al job (además de
 El enunciado pide "Evidencia de seguridad: Reporte de Trivy, archivo SBOM y salida de verificación de firma con Cosign" y, por separado, "Bloqueo por vulnerabilidad crítica: URL directa al Pull Request bloqueado" e "Imagen firmada: Referencia completa registro/imagen:tag" en la tabla de enlaces obligatoria. Escanear *antes* de publicar (en vez de escanear la imagen ya publicada) es lo que hace que el bloqueo sea real: una imagen con una vulnerabilidad crítica **nunca llega a existir en GHCR**, no queda ahí "publicada pero marcada como insegura".
 
 **Nada de esto necesitó Azure ni ningún clúster** — corre íntegramente dentro de GitHub Actions. Para generar la evidencia real solo hace falta disparar el pipeline (push normal o un PR) desde `feature/Practica8`; no hay ninguna acción tuya pendiente relacionada con Azure en esta fase.
+
+### Fase 3.1 — El bloqueo se activó de verdad (no fue un simulacro) y el fix
+
+Al correr el pipeline real, el escaneo bloqueante hizo exactamente lo que tenía que hacer: `api-gateway` (`nginx:1.29.1-alpine`, Alpine 3.22.1) tenía 3 vulnerabilidades `CRITICAL` con parche ya publicado (`libssl3`/`libcrypto3` CVE-2026-31789, `pcre2` CVE-2025-58050), y el job se puso en rojo. Otros servicios basados en Alpine/Debian probablemente comparten el mismo tipo de problema (paquetes del sistema operativo desactualizados dentro de la imagen base, no un bug de la aplicación).
+
+**Fix:** se agregó una línea de actualización de paquetes del SO justo después del `FROM` en la imagen final de cada Dockerfile afectado — `RUN apk update && apk upgrade --no-cache` en las bases Alpine (`api-gateway`, `auth-service`, `notification-service`) y `RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*` en las bases Debian slim (`catalog-service`, `order-service`, `cron1`, `cron2`). No cambia la versión mayor de la imagen base, solo trae los parches ya publicados para esa misma versión.
+
+**Verificado, no solo escrito:** se construyó `api-gateway` localmente con Docker antes y después del fix, y se escaneó con Trivy real (`v0.74.0`, misma herramienta que usa el pipeline) contra la imagen ya parcheada: **0 vulnerabilidades CRITICAL** (antes: 3). Los otros 6 Dockerfile se recompilaron localmente para confirmar que el cambio no rompe el build (sí compilan); no se repitió el escaneo completo en los seis por tiempo, pero la técnica es la misma que ya se comprobó end-to-end.
+
+Esta corrida fallida real (antes del fix) ya es evidencia legítima de "Bloqueo por vulnerabilidad crítica" para la tabla de enlaces obligatoria — vale la pena guardar la URL de ese run antes de que quede tapada por corridas más nuevas ya en verde.
+
+### Fase 3.2 — El fix de la 3.1 no alcanzaba para todo: dos CVE más, de origen distinto
+
+Al abrir el [PR #1](https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1) hacia `main` (para reproducir el bloqueo como PR de verdad, ver conversación) y después aplicar el fix de la Fase 3.1, dos servicios siguieron fallando: `auth-service` y `order-service`. El `apk upgrade`/`apt-get upgrade` de la 3.1 solo cubre paquetes del sistema operativo — estas dos CVE eran de **otro origen**, cada una distinta:
+
+- **`auth-service`:** `tar@6.2.1` (`CVE-2026-59873`) — no es una dependencia de la aplicación ni de Alpine: viene empaquetada **dentro del propio `npm`** que trae `node:20-alpine` (`/usr/local/lib/node_modules/npm/node_modules/tar`). Confirmado inspeccionando la imagen final con `docker run ... find`. Como la imagen final corre la app ya compilada vía `CMD ["node", "dist/index.js"]` — nunca usa `npm`/`npx`/`corepack` en runtime — el fix fue **eliminarlos del todo** de la imagen final (`RUN rm -rf /usr/local/lib/node_modules/npm ...`), no solo parchear `tar`. Además de resolver la CVE, reduce la superficie de ataque y el tamaño de la imagen.
+- **`order-service`:** `h11@0.14.0` (`CVE-2025-43859`) — esta sí es una dependencia real de la aplicación, transitiva de `httpx==0.25.0` (usado para la llamada HTTP a `catalog-service`). `catalog-service` no tiene este problema porque no usa `httpx` (es servidor, no cliente HTTP). No alcanzaba con pinnear `h11` a mano: `httpx==0.25.0` exige una versión de `h11` incompatible con la parcheada. El fix fue subir `httpx` a `0.28.1`, que sí admite `h11>=0.16.0`.
+
+**Verificado, no solo escrito:**
+- `order-service`: se instaló `requirements.txt` completo en un venv limpio (sin conflictos, `h11` quedó en `0.16.0`) y se reconstruyó la imagen con Docker (compila bien).
+- `auth-service`: se reconstruyó la imagen, se confirmó que `npm`/`tar` ya no existen en el filesystem de la imagen final, se corrió el contenedor con variables de entorno dummy y arrancó correctamente ("Auth Service is running on http://localhost:4000"), y se escaneó con Trivy real contra la imagen ya arreglada: **0 vulnerabilidades CRITICAL** (confirmado también parseando el JSON del reporte, no solo mirando la tabla).
+- Antes de tocar `httpx`, se revisó el uso real en el código (`main.py`): solo `httpx.post(...)` y `httpx.RequestError`, API estable entre 0.25 y 0.28 — sin riesgo de romper nada.
+
+**Lección para las próximas veces:** un `apk upgrade`/`apt-get upgrade` solo cubre paquetes del sistema operativo. Las vulnerabilidades en dependencias de la aplicación (`pip`, `npm`) o en herramientas empaquetadas dentro de la imagen base (como `npm` trayendo su propio `tar`) necesitan su propio fix, caso por caso — no hay un único comando que las resuelva todas.
+
+### Fase 3.3 — El fix de `httpx` de la 3.2 rompió los tests de `order-service`
+
+Al subir el fix de la Fase 3.2, el job "Test: order-service" empezó a fallar en la *colección* de tests (antes de llegar a ejecutar ninguno): `TypeError: Client.__init__() got an unexpected keyword argument 'app'` en `TestClient(main.app)`. Causa: `httpx==0.28.1` **eliminó por completo** el parámetro de compatibilidad `app=` que versiones viejas de Starlette (la que trae `fastapi==0.103.1`, ya bastante desactualizado) usan internamente para construir `TestClient`. No es un problema del fix de seguridad en sí — es que el salto de versión (`0.25.0` → `0.28.1`) fue más grande del necesario.
+
+**Fix:** en vez de `httpx==0.28.1`, se bajó a `httpx==0.27.2` — la última versión de la serie 0.27, donde ese parámetro todavía existe (con warning de deprecación, pero funciona) y que **ya resuelve `h11` a `0.16.0`** igual que 0.28.1 (probado explícitamente: `httpx==0.26.0`, `0.27.0` y `0.27.2` resuelven `h11` a la misma versión parcheada; el salto más grande a 0.28 no aportaba nada extra en materia de seguridad, solo rompía compatibilidad).
+
+**Verificado, no solo escrito:** se levantó un MySQL real en Docker (mismo esquema que usa CI, `orders-db/init.sql`), se instaló el `requirements.txt` completo con `httpx==0.27.2` en un venv limpio, y se corrieron los 3 tests de `tests/test_main.py` de punta a punta: **3 passed**. Se reconstruyó además la imagen de Docker completa y se volvió a escanear con Trivy real: sigue en **0 CRITICAL** (confirmado parseando el JSON).
+
+**Lección para las próximas veces:** al subir una dependencia solo para resolver una CVE, conviene subir al **mínimo** que resuelve el problema, no al último release disponible — saltos más grandes traen más riesgo de romper compatibilidad con el resto del código (en este caso, con una versión vieja de Starlette que ningún commit de esta fase tocó). Y, sobre todo: verificar corriendo los tests reales, no solo instalando las dependencias — el venv sin tests habría dejado pasar este error igual.

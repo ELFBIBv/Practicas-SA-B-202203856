@@ -13,7 +13,7 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | Ejecución exitosa del pipeline | PENDIENTE |
 | Reversión automática | PENDIENTE |
 | Despliegue rechazado por política | PENDIENTE |
-| Bloqueo por vulnerabilidad crítica | PENDIENTE |
+| Bloqueo por vulnerabilidad crítica | PR bloqueado: https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1 — job fallido (3 CVE CRITICAL en `api-gateway`, ver también otros 5 servicios bloqueados en el mismo PR): https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35315634021/job/105506751987?pr=1 |
 | Imagen firmada | PENDIENTE |
 | Reporte de prueba de carga | PENDIENTE |
 | Video demostrativo | PENDIENTE |
