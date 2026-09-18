@@ -557,25 +557,11 @@ jobs:
             --exclude 'charts/*.tgz' \
             source/P8/charts/sa-platform/ gitops/charts/sa-platform/
 
-      - name: Asegurar que yq esté disponible
-        run: |
-          if ! command -v yq >/dev/null 2>&1; then
-            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-            sudo chmod +x /usr/local/bin/yq
-          fi
-          yq --version
-
       - name: Actualizar el tag de imagen al commit recién publicado
         run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          cd gitops
-          yq -i ".\"api-gateway\".image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".auth.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".catalog.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".orders.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".notifications.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".cronjobs.cron1.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
-          yq -i ".cronjobs.cron2.image.tag = \"$SHORT_SHA\"" charts/sa-platform/values-azure.yaml
+          python3 source/P8/scripts/bump-image-tag.py \
+            gitops/charts/sa-platform/values-azure.yaml \
+            "${GITHUB_SHA:0:7}"
 
       - name: Abrir Pull Request en el repo GitOps
         run: |
