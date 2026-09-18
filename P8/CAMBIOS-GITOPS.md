@@ -234,3 +234,107 @@ Clúster con 2 nodos `Ready` en `chilecentral`. Luego se corrió el Terraform de
 **Un detalle operativo que vale la pena dejar anotado:** al correr `az aks get-credentials`, el `~/.kube/config` local estaba corrupto (28 bytes, sin las claves `clusters`/`contexts`) — resto de haber borrado varios clústeres `kind` efímeros durante las pruebas locales de las Fases 4-6. Se respaldó (`mv` a `.bak`, no se borró) antes de dejar que `az aks get-credentials` generara uno nuevo.
 
 **Por qué:** era el paso bloqueante para todo lo que falta (ArgoCD, Kyverno en el clúster real, Sealed Secrets, disparar el pipeline hacia AKS). Terraform no crea el clúster en sí — solo administra namespace/cuotas/RBAC dentro de uno que ya existe (ver `terraform/README.md`) — por eso el clúster se creó primero, a mano con `az aks create`, siguiendo el procedimiento ya documentado en `P8/README.md`.
+
+## Fase 8 — ArgoCD real, sincronizando el clúster de verdad
+
+**Qué se hizo, comando por comando:**
+
+### 1. Instalar ArgoCD
+
+```bash
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+El `--dry-run=client -o yaml | kubectl apply -f -` es el patrón para crear un namespace de forma idempotente (no falla si ya existe, a diferencia de `kubectl create namespace` a secas). El segundo comando es el manifiesto oficial de instalación de ArgoCD (deployments, CRDs, RBAC). **Falló**: `metadata.annotations: Too long: may not be more than 262144 bytes` en el CRD de `ApplicationSet` — el mismo límite de 256KB en la anotación `last-applied-configuration` que ya habíamos documentado para los CRDs de Argo Rollouts en el job `deploy-kind` del pipeline. Se reconoció el error al toque por ser el mismo patrón, y se resolvió igual:
+
+```bash
+kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd wait --for=condition=available --timeout=180s deployment --all
+```
+
+`--server-side` mueve el cálculo del diff al propio API server (que no tiene ese límite de 256KB, es una limitación específica del enfoque cliente de `last-applied-configuration`). El `wait` es para no seguir hasta que los 6 deployments de ArgoCD estén realmente disponibles, no solo creados.
+
+### 2. Leer antes de aplicar (comandos de solo lectura, nada se modificó)
+
+```bash
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/argocd/application.yaml --jq '.content' | base64 -d
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/charts/sa-platform --jq '.[].name'
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/charts/sa-platform/values-azure.yaml --jq '.content' | base64 -d
+```
+
+Antes de aplicar un `Application` de ArgoCD contra un clúster real, había que saber exactamente qué iba a hacer: a qué repo/rama/path apunta, si el chart ya tenía contenido real (sí, de una sincronización manual anterior del repo GitOps) y qué necesitaba `values-azure.yaml` para funcionar. Ahí se vio que el chart pide dos secretos (`ghcr-secret`, `sa-platform-nats-auth`) que el repo GitOps **deliberadamente no versiona en texto plano** (así lo dice su propio README).
+
+### 3. Confirmar que los paquetes de GHCR son privados, antes de pedir un token
+
+```bash
+gh api /orgs/ELFBIBv/packages/container/sa-api-gateway   # 404, no aplica (no es org)
+gh api /user/packages/container/sa-api-gateway            # 403: falta scope read:packages
+docker logout ghcr.io
+docker pull ghcr.io/elfbibv/sa-api-gateway:6d8d12d         # unauthorized
+```
+
+En vez de asumir que hacía falta un token y pedírselo al usuario sin más, se probó un pull completamente anónimo (`docker logout` primero, para no arrastrar ninguna sesión previa). `unauthorized` (no `not found`) confirma que el paquete es privado de verdad — si fuera público, el pull anónimo habría funcionado igual.
+
+### 4. Crear los dos secretos que el chart necesita
+
+```bash
+NATS_TOKEN=$(openssl rand -hex 32)
+kubectl create secret generic sa-platform-nats-auth -n sa-p5 --from-literal=token="$NATS_TOKEN"
+```
+
+Este lo generó el agente porque no depende de ninguna cuenta externa: es solo un valor aleatorio para que los pods de NATS se autentiquen entre ellos, nadie más lo necesita saber.
+
+```bash
+kubectl create secret docker-registry ghcr-secret -n sa-p5 \
+  --docker-server=ghcr.io --docker-username=ELFBIBv --docker-password=<PAT del usuario>
+```
+
+Este lo creó el usuario, con su propio Personal Access Token de GitHub (scope `read:packages`). Generar tokens de acceso de una cuenta ajena no es algo que un agente deba hacer por su cuenta, aunque técnicamente pudiera pedirlo — es una credencial real de la persona dueña de la cuenta.
+
+```bash
+kubectl get secret ghcr-secret -n sa-p5   # solo para confirmar que ya existía antes de seguir
+```
+
+### 5. Aplicar la Application y diagnosticar por qué no sincronizaba
+
+```bash
+kubectl apply -f application.yaml
+kubectl get application sa-platform -n argocd
+kubectl describe application sa-platform -n argocd
+```
+
+Quedó en `OutOfSync`. El `describe` mostró la causa real en sus eventos: `Rollout.argoproj.io "" not found`, `AnalysisTemplate.argoproj.io "" not found`. El clúster `aks-sa-p8` nunca había tenido instalados los CRDs de Argo Rollouts — solo se instalaban dentro de los clústeres `kind` efímeros que usa el pipeline de CI para sus propias pruebas, nunca contra AKS. Mismo fix ya usado ahí:
+
+```bash
+kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply --server-side --force-conflicts -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+```
+
+### 6. Forzar el reintento sin esperar el backoff automático
+
+```bash
+kubectl annotate application sa-platform -n argocd argocd.argoproj.io/refresh=hard --overwrite
+```
+
+ArgoCD ya tenía reintentos automáticos programados (`retry.limit: 3` con backoff creciente, definido en el propio `application.yaml`), pero esperar minutos de backoff sin necesidad no tenía sentido ahora que la causa raíz (CRDs faltantes) ya estaba resuelta — este annotation le pide un refresh y reintento inmediatos.
+
+### 7. Verificar que quedó sano de verdad, no solo "Synced"
+
+```bash
+kubectl rollout status deployment/sa-platform-auth -n sa-p5      # y catalog, notifications, orders
+kubectl rollout status statefulset/sa-platform-mysql -n sa-p5    # y mongodb, nats
+bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+kubectl get pods,svc -n sa-p5
+curl http://<IP-pública-del-LoadBalancer>/health
+curl -X POST http://<IP-pública>/api/catalog/graphql -d '{"query":"{ products { id } }"}'
+```
+
+`Synced` en ArgoCD solo confirma que los manifiestos ya se aplicaron al clúster, no que la aplicación esté realmente sirviendo tráfico. Por eso se esperó cada componente explícitamente (deployments, luego statefulsets — mismo orden que ya se había aprendido que importa, ver Fase 5) y, al final, se le mandó tráfico HTTP real a la IP pública que Azure le asignó al `Service` tipo `LoadBalancer`, para confirmar con una respuesta real y no con el estado reportado por Kubernetes.
+
+**Resultado:** `Synced` / `Healthy`, 7 servicios corriendo (`1/1` o `2/2` cada uno), Rollout del gateway en fase `Healthy`, respuestas reales de `/health` y de la GraphQL de `catalog` desde una IP pública de internet — no `port-forward`, no `kind`.
+
+**Por qué:** es el corazón del entregable de la práctica — que ArgoCD, no el pipeline de CI, sea quien aplica cambios al clúster real. Con esto, la separación que ya estaba documentada en el README del repo GitOps (el pipeline de código nunca toca AKS directamente) queda demostrada en la práctica, no solo escrita.
+
+**Qué queda pendiente de esta fase:** el sync de hoy se aplicó con el `Application` manifest aplicado a mano (`kubectl apply`) y el chart que ya estaba en el repo GitOps de una corrida anterior — todavía no se disparó el flujo completo end-to-end (push → CI → PR automático al repo GitOps → merge → ArgoCD detecta y sincroniza solo). Eso es lo que falta correr para poder llenar la fila "Ejecución exitosa del pipeline" de la tabla obligatoria con una corrida que cubra AKS de punta a punta. Los dos secretos siguen siendo secretos planos creados a mano, no Sealed Secrets — esa migración sigue pendiente.
