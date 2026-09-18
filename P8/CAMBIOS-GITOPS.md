@@ -337,4 +337,67 @@ curl -X POST http://<IP-pública>/api/catalog/graphql -d '{"query":"{ products {
 
 **Por qué:** es el corazón del entregable de la práctica — que ArgoCD, no el pipeline de CI, sea quien aplica cambios al clúster real. Con esto, la separación que ya estaba documentada en el README del repo GitOps (el pipeline de código nunca toca AKS directamente) queda demostrada en la práctica, no solo escrita.
 
-**Qué queda pendiente de esta fase:** el sync de hoy se aplicó con el `Application` manifest aplicado a mano (`kubectl apply`) y el chart que ya estaba en el repo GitOps de una corrida anterior — todavía no se disparó el flujo completo end-to-end (push → CI → PR automático al repo GitOps → merge → ArgoCD detecta y sincroniza solo). Eso es lo que falta correr para poder llenar la fila "Ejecución exitosa del pipeline" de la tabla obligatoria con una corrida que cubra AKS de punta a punta. Los dos secretos siguen siendo secretos planos creados a mano, no Sealed Secrets — esa migración sigue pendiente.
+### 8. Entrar a la UI de ArgoCD y sacar la evidencia visual
+
+ArgoCD, por defecto, expone su servidor (`argocd-server`) como `ClusterIP` — sin IP pública, a propósito: su usuario `admin` puede modificar cualquier cosa del clúster, y dejarlo abierto a todo internet sin SSO/autenticación adicional sería un riesgo real que no tenía sentido asumir solo para esta entrega. Para llegar a la UI sin exponerla, se usó el mecanismo estándar de `kubectl`, un túnel autenticado contra el propio API server de AKS (no expone nada nuevo hacia afuera):
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+
+El primer comando saca la contraseña autogenerada del usuario `admin` (Secret que ArgoCD crea solo en su primera instalación); el `; echo` es solo para que el prompt no quede pegado al valor decodificado, ya que `base64 -d` no agrega salto de línea. El segundo abre el túnel: quien entra a `https://localhost:8080` en su navegador en realidad está hablando, a través de ese túnel, con el pod `argocd-server` corriendo en Azure — no hay ningún servidor corriendo localmente (se explicó la mecánica completa en la conversación, dado que no era obvio a primera vista).
+
+Con la sesión iniciada (`admin` + esa contraseña), se sacaron dos capturas reales, guardadas en [`P8/evidencia/`](evidencia/):
+
+- [`argocd-sync.png`](evidencia/argocd-sync.png): vista de árbol de recursos de la `Application` — `Healthy`/`Synced`, con cada componente (`sa-platform-auth`, `sa-platform-catalog`, `sa-platform-notifications`, `sa-platform-orders`, cuotas, límites) mostrando su propio estado de salud.
+- [`argocd-historial.png`](evidencia/argocd-historial.png): pestaña "History and Rollback", detalle del último sync — iniciado por `automated sync policy` (no a mano), 1m35s de duración, y el mismo commit "Merge pull request #2 from ELFBIBv/promote/6d8d12d" que se describe abajo.
+
+**Hallazgo al revisar esa captura:** el mensaje del commit sincronizado (`Merge pull request #2 from ELFBIBv/promote/6d8d12d`) llevó a revisar el [PR #2 del repo GitOps](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops/pull/2) con `gh pr view 2 --repo ELFBIBv/Practicas-SA-B-202203856-gitops --json title,url,mergedAt,body,commits`. Confirma que el job `promote-to-gitops` del pipeline **ya se había disparado y mergeado de verdad** (autor `sa-platform-ci`, el bot configurado en ese job), el 18/09 04:08 UTC — antes de que ArgoCD existiera en este clúster. O sea: el mecanismo "CI abre PR → se mergea" ya estaba probado de punta a punta; lo que faltaba, y se completó hoy, era tener un ArgoCD real esperando para recogerlo.
+
+**Qué queda pendiente de esta fase:** aunque el mecanismo de PR ya se probó una vez (PR #2, antes de esta sesión), no hubo todavía una corrida fresca de `workflow_dispatch` que dispare ese mismo flujo con **todo lo que se agregó después** (Kyverno, k6, informe de incidente) y que ArgoCD la sincronice en vivo mientras está corriendo — eso es lo que falta para una evidencia end-to-end completamente actual. Los dos secretos (`ghcr-secret`, `sa-platform-nats-auth`) siguen siendo secretos planos creados a mano, no Sealed Secrets — esa migración sigue pendiente.
+
+## Fase 9 — Kyverno en el clúster real, incluyendo el camino "permitido" completo
+
+**Qué se hizo:** se instaló Kyverno en `aks-sa-p8` (mismo mecanismo que en `kind`, Fase 4) y se aplicaron las 3 políticas de `P8/kyverno/policies/`:
+
+```bash
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace --wait --timeout 180s
+kubectl apply -f P8/kyverno/policies/
+```
+
+**Caso rechazado, contra el clúster real:**
+
+```bash
+kubectl run policy-check-external-image --image=nginx:latest --restart=Never
+```
+
+Rechazado en el acto por `restrict-image-registries` y `require-non-root-user` simultáneamente — mismo resultado que ya se había probado en `kind`, ahora confirmado contra AKS.
+
+**Caso permitido — esta vez sí se pudo cerrar del todo, a diferencia de la Fase 4:** en `kind` no se había podido probar el camino "permitido" de `verify-image-signatures` porque ningún token a mano tenía scope `read:packages` real. Acá sí, porque ya existe `ghcr-secret` en `sa-p5` con el PAT real del usuario. El problema es que Kyverno necesita sus propias credenciales de registry — no las del pod que se está evaluando — así que hubo que dárselas al propio controlador de Kyverno:
+
+```bash
+# Copiar el secret ya existente al namespace donde vive el admission controller de Kyverno
+kubectl get secret ghcr-secret -n sa-p5 -o json | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); d['metadata']={'name':'ghcr-secret','namespace':'kyverno'}; print(json.dumps(d))" | \
+  kubectl apply -f -
+
+# helm show values kyverno/kyverno reveló el campo correcto: no es un --extraArgs
+# (eso se había probado sin éxito en la Fase 4), es un valor raíz del chart:
+helm upgrade kyverno kyverno/kyverno -n kyverno --reuse-values \
+  --set existingImagePullSecrets[0]=ghcr-secret --wait --timeout 180s
+```
+
+Con eso wireado, se probó primero con la imagen que el chart tiene desplegada hoy (`sa-notification-service:6d8d12d`): Kyverno **sí logró autenticarse** (el error cambió de `UNAUTHORIZED: authentication required` a `no signatures found` — prueba de que la credencial ya funcionaba), pero esa build en particular no tenía firma asociada. Se repitió con una imagen que sí se había confirmado firmada en esta misma sesión (`ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e...`, la misma referencia de la fila "Imagen firmada" del README):
+
+```bash
+kubectl run policy-check-signed2 \
+  --image="ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e02de72c2092a554fba5ed3e1da8b1331091c38ccb3a8bc262b9763" \
+  --overrides='{"spec":{"containers":[{"...","securityContext":{"runAsNonRoot":true,"runAsUser":10001}}]}}' \
+  --dry-run=server
+# → pod/policy-check-signed2 created (server dry run)
+```
+
+**Admitido.** Con esto quedan demostradas las 3 políticas en ambas direcciones, contra el clúster real: rechazan lo que no cumple y permiten lo que sí — incluyendo la verificación criptográfica real de la firma de Cosign, que en la Fase 4 había quedado como pendiente por una limitación de credenciales del entorno de prueba, no de la política en sí.
+
+**Por qué:** cerraba una brecha real: en la Fase 4 se dejó documentado explícitamente que el camino "permitido" de `verify-image-signatures` no se había probado por falta de credenciales, y que se completaría "cuando Kyverno se instale en el AKS real". Este es exactamente ese momento.
