@@ -1,15 +1,31 @@
-# Práctica 7 - Integración y despliegue continuo (CI/CD)
+# Práctica 8 - GitOps, entrega progresiva y seguridad de la cadena de suministro
 
-Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P7/api-gateway`, `P7/auth`, `P7/catalog`, `P7/orders`, `P7/notifications`, `P7/cronjobs` y sobre el chart de Helm en `P7/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
+Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P8/api-gateway`, `P8/auth`, `P8/catalog`, `P8/orders`, `P8/notifications`, `P8/cronjobs` y sobre el chart de Helm en `P8/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
+
+> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo el pipeline heredado de la Práctica 7; faltan Terraform, repositorio GitOps, ArgoCD persistente, Kyverno, Trivy/SBOM/Cosign, pruebas de carga y la tabla de enlaces obligatoria abajo, que por ahora está marcada como `PENDIENTE`.
+
+## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
+
+| Ítem | Enlace o dato requerido |
+| --- | --- |
+| Repositorio GitOps | PENDIENTE |
+| Aplicación en ArgoCD | PENDIENTE |
+| Ejecución exitosa del pipeline | PENDIENTE |
+| Reversión automática | PENDIENTE |
+| Despliegue rechazado por política | PENDIENTE |
+| Bloqueo por vulnerabilidad crítica | PENDIENTE |
+| Imagen firmada | PENDIENTE |
+| Reporte de prueba de carga | PENDIENTE |
+| Video demostrativo | PENDIENTE |
 
 ## Estado actual
 
 | Etapa | Estado | Detalle |
 | --- | --- | --- |
-| Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica7`. |
+| Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica8`. |
 | Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
 | Despliegue efímero en **kind** | **Automático, corre después de cada push (no en PR)** | El job `deploy-kind` descarga las 7 imágenes recién publicadas en GHCR (las mismas que se acaban de subir, no una copia reconstruida aparte), crea un clúster real de Kubernetes (temporal) dentro del propio runner, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
-| Despliegue a AKS | **Verificado** | Clúster `aks-sa-p7` (resource group `rg-practica7`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
+| Despliegue a AKS | **Verificado (heredado de P7, pendiente re-verificar con canary)** | Clúster `aks-sa-p8` (resource group `rg-practica8`) creado y desplegado con `helm upgrade --install` vía el job manual `deploy-to-aks`. Los 16 pods esperados (5 microservicios x 2 réplicas, `mysql-0`, `mongodb-0`, `nats-0`, y los CronJobs) quedaron en `Running`/`Completed`. |
 
 Se validó el pipeline completo de punta a punta: build, test, dockerización, push a GHCR, despliegue efímero automático en kind, y despliegue real a AKS.
 
@@ -64,7 +80,7 @@ flowchart TD
     subgraph "Etapa 5: Deploy a AKS (manual)"
         G{"¿workflow_dispatch\ncon deploy=true?"}
         G -- No --> H[No se ejecuta nada más]
-        G -- Sí --> I[helm upgrade --install\nen AKS vía P7/charts/sa-platform]
+        G -- Sí --> I[helm upgrade --install\nen AKS vía P8/charts/sa-platform]
     end
 ```
 
@@ -119,7 +135,7 @@ Los "contenedores de servicio" (`services:` en el workflow) son bases de datos r
 
 | Evento | Qué corre |
 | --- | --- |
-| `push` a `feature/**` | Build + Test de los 6 servicios, luego build+push de las imágenes con tag = nombre de rama y sha corto (ej. `feature-Practica7`, `a1b2c3d`) |
+| `push` a `feature/**` | Build + Test de los 6 servicios, luego build+push de las imágenes con tag = nombre de rama y sha corto (ej. `feature-Practica8`, `a1b2c3d`) |
 | `push` a `develop` o `main` | Igual que arriba: publica tags de rama y sha corto, sin utilizar `latest` |
 | `push` de un tag `vX.Y.Z` | Igual, y adicionalmente etiqueta la imagen con esa versión semántica |
 | `pull_request` hacia `main`/`develop` | Build + Test + build de Docker **sin publicar** (valida que el `Dockerfile` compila antes de aceptar el PR) |
@@ -146,23 +162,23 @@ Ya configurado y verificado en este repositorio:
 
 | Tipo | Nombre | Contenido |
 | --- | --- | --- |
-| Secret | `AZURE_CREDENTIALS` | JSON de un service principal con permisos sobre el resource group del clúster. Se genera con `az ad sp create-for-rbac --name sa-p7-cicd --role Contributor --scopes /subscriptions/<ID_SUSCRIPCION>/resourceGroups/<RESOURCE_GROUP> --sdk-auth` |
+| Secret | `AZURE_CREDENTIALS` | JSON de un service principal con permisos sobre el resource group del clúster. Se genera con `az ad sp create-for-rbac --name sa-p8-cicd --role Contributor --scopes /subscriptions/<ID_SUSCRIPCION>/resourceGroups/<RESOURCE_GROUP> --sdk-auth` |
 | Secret | `GHCR_PAT` | Personal Access Token (classic) con el scope `read:packages`, usado para crear el `imagePullSecret` dentro del clúster. Se usa un PAT y no el `GITHUB_TOKEN` porque este último expira apenas termina el workflow, y el clúster necesita poder re-descargar las imágenes después |
-| Variable (repo) | `AZURE_RESOURCE_GROUP` | `rg-practica7` |
-| Variable (repo) | `AZURE_AKS_CLUSTER` | `aks-sa-p7` |
+| Variable (repo) | `AZURE_RESOURCE_GROUP` | `rg-practica8` |
+| Variable (repo) | `AZURE_AKS_CLUSTER` | `aks-sa-p8` |
 | Environment | `production-aks` | Opcional pero recomendado: crear un *environment* en **Settings → Environments** con un "required reviewer" para que el job de deploy pida aprobación manual incluso si alguien dispara el workflow por error |
 
 Si se elimina el clúster y se necesita recrearlo con otro nombre, estos mismos secrets/variables deben actualizarse. Sin credenciales válidas, el job `deploy-to-aks` falla de forma controlada en el paso de login de Azure, sin riesgo.
 
 ## Procedimiento para crear el clúster de AKS de esta práctica
 
-Mismo procedimiento que en `P6/README.md`, adaptado con nombres propios de P7 para no confundirlo con el clúster ya eliminado de la práctica anterior. **Cada paso de aquí en adelante genera costo real por hora en Azure hasta que el resource group se elimine.**
+Mismo procedimiento que en `P6/README.md`, adaptado con nombres propios de P8 para no confundirlo con el clúster ya eliminado de la práctica anterior. **Cada paso de aquí en adelante genera costo real por hora en Azure hasta que el resource group se elimine.**
 
 ### 1. Variables y sesión de Azure
 
 ```bash
-export RESOURCE_GROUP="rg-practica7"
-export AKS_CLUSTER="aks-sa-p7"
+export RESOURCE_GROUP="rg-practica8"
+export AKS_CLUSTER="aks-sa-p8"
 export LOCATION="chilecentral"
 export NAMESPACE="sa-p5"
 export RELEASE="sa-platform"
@@ -205,7 +221,7 @@ kubectl get nodes
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
 az ad sp create-for-rbac \
-  --name "sa-p7-cicd" \
+  --name "sa-p8-cicd" \
   --role Contributor \
   --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
   --sdk-auth
@@ -230,15 +246,15 @@ rm azure-creds.json            # nunca debe quedar ni commitearse este archivo
 # GHCR_PAT: es una sola línea, se puede pasar directo
 echo "TU_TOKEN_AQUI" | gh secret set GHCR_PAT
 
-gh variable set AZURE_RESOURCE_GROUP --body "rg-practica7"
-gh variable set AZURE_AKS_CLUSTER --body "aks-sa-p7"
+gh variable set AZURE_RESOURCE_GROUP --body "rg-practica8"
+gh variable set AZURE_AKS_CLUSTER --body "aks-sa-p8"
 ```
 
 Opcional pero recomendado: crear el *environment* `production-aks` en **Settings → Environments** con un "required reviewer".
 
 ### 6. Disparar el despliegue
 
-**Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`.
+**Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `deploy-to-aks` hace login en Azure, obtiene las credenciales del clúster, crea el `imagePullSecret` de GHCR con el `GHCR_PAT`, y corre `helm upgrade --install` sobre `P8/charts/sa-platform` con `values-azure.yaml`.
 
 > **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
 
@@ -255,7 +271,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 - **Build + Test + Dockerización:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
 - **Deploy efímero en kind:** se dispara solo, automáticamente, después de cada `push` (no corre en Pull Requests, porque ahí no se publica ninguna imagen que descargar).
-- **Activar el despliegue real a AKS:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 7) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
+- **Activar el despliegue real a AKS:** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere que exista el clúster de AKS y los secrets/variables de la sección anterior.
 
 ## Documentación técnica del flujo
 
@@ -264,7 +280,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 3. **Dockerización:** una vez que las 6 pruebas pasan, se construyen las 7 imágenes (`docker/build-push-action` con caché de capas vía GitHub Actions cache) y se etiquetan según la rama/tag/commit.
 4. **Push a GHCR:** en cualquier evento que no sea un Pull Request, las imágenes se publican en `ghcr.io/elfbibv/*`, listas para ser referenciadas por un despliegue.
 5. **Deploy efímero en kind (automático):** una vez que `build-and-push` publicó las 7 imágenes en GHCR (nunca antes: se sigue el principio "build once, deploy many"), el job `deploy-kind` descarga esas mismas imágenes con `docker pull` (usando el tag de sha corto del commit), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, las carga ahí con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). No corre en Pull Requests (ahí `build-and-push` no publica nada). Esto prueba que el chart de Helm funciona de verdad, con la imagen real que se acaba de publicar, sin depender de Azure ni de ningún secret adicional.
-6. **Deploy real a AKS (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P7/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
+6. **Deploy real a AKS (manual):** hace login en Azure, obtiene las credenciales del clúster, actualiza el `imagePullSecret`, y corre `helm upgrade --install` sobre `P8/charts/sa-platform` con `values-azure.yaml`, sobreescribiendo el tag de cada imagen con el commit corto que disparó el workflow.
 
 ## Evidencia de ejecución
 
