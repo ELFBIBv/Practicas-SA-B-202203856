@@ -553,3 +553,84 @@ result = products_collection.find_one_and_update(
 El stock mínimo pasa a ser parte del filtro del propio `find_one_and_update` (atómico a nivel de MongoDB), no un chequeo previo separado — de dos compras concurrentes, como mucho una gana la condición atómica; la otra recibe `None`. Se rechaza explícitamente `quantity_to_discount < 0` antes de llegar a Mongo. Del lado de `order-service`, se eliminó el chequeo de stock ahora redundante (`if product_data["stock"] < quantity`) y se reemplazó por depender del resultado real de `updateProductStock`: si devuelve `null`, la orden no se crea (antes, un fallo en ese paso podía dejar el stock ya descontado sin una orden que lo respalde — ahora es imposible, porque la orden se inserta *después* de confirmar que el descuento atómico tuvo éxito).
 
 **Por qué importa, en conjunto:** ninguno de estos 7 hallazgos había sido detectado por Trivy, por los tests que ya existían, ni por ninguna de las fases anteriores — hacía falta leer el código con otro criterio (seguridad, concurrencia, exactitud de la documentación) para encontrarlos. Confirma algo que ya se sabía en abstracto pero vale la pena decir en concreto: escanear vulnerabilidades conocidas (Trivy) y tener tests que pasan no es lo mismo que estar libre de bugs de lógica o de diseño de permisos — son capas complementarias, no sustitutas.
+
+## Fase 13 — Recuperación del sync real: Kyverno, versión canary y rotación accidental de Secrets
+
+### 1. El `1 Error` inicial de ArgoCD sí era Kyverno, pero no una firma inválida
+
+El sync del commit GitOps `d281539` intentó desplegar las imágenes `705a98e` y quedó `OutOfSync`/`Degraded`. Los seis recursos nuevos mostraron el mismo rechazo:
+
+```text
+verify-image-signatures: failed to verify image ghcr.io/elfbibv/...:705a98e:
+GET https://ghcr.io/token?... UNAUTHORIZED: authentication required
+```
+
+Se comprobó que `ghcr-secret` existía tanto en `sa-p5` como en `kyverno`, que ambos tenían el mismo contenido, que el token podía leer el manifiesto privado con Docker y que el admission controller tenía permisos para leer el Secret. Reiniciar Kyverno tampoco eliminó el error. La diferencia estaba en el autogen de la política: la validación anticipada de `Deployment`/`CronJob` no reutilizaba de forma fiable las credenciales de la plantilla, mientras la admisión del Pod real sí funcionaba.
+
+La primera mitigación fue cambiar temporalmente `validationFailureAction` a `Audit`; eso dejó completar el sync, pero también dejó de bloquear imágenes sin firma, así que **no** se aceptó como solución final. El arreglo definitivo en `03-verify-image-signatures.yaml` fue:
+
+- volver a `Enforce`;
+- declarar `imageRegistryCredentials.secrets: [ghcr-secret]` explícitamente;
+- desactivar el autogen solo para esa regla con `pod-policies.kyverno.io/autogen-controllers: none`.
+
+La garantía no se pierde: todo `Deployment`, `Job` o `CronJob` necesita crear un Pod antes de ejecutar código, y ese Pod sigue pasando por la regla `Enforce`. Pruebas de admisión con `--dry-run=server` en AKS:
+
+```text
+ghcr.io/elfbibv/sa-api-gateway:705a98e       -> permitido
+ghcr.io/elfbibv/sa-notification-service:6d8d12d -> rechazado: no signatures found
+```
+
+El segundo resultado es importante: el error dejó de ser `UNAUTHORIZED`, por lo que Kyverno sí autenticó contra GHCR y llegó a la verificación Cosign. La CI también se endureció para crear un `ghcr-secret` efímero en su kind, probar el rechazo de una referencia no verificable y, en `main`, el allow path de una imagen realmente firmada.
+
+### 2. El `Degraded` posterior ya no era Kyverno: el gateway reportaba otra versión
+
+Con la política temporalmente en `Audit`, ArgoCD completó el sync y pasó a `Synced`, pero el Rollout abortó en el primer análisis. El `AnalysisRun` devolvió:
+
+```json
+{"status":"ok","version":"0.0.0-dev"}
+```
+
+El valor esperado era `705a98e`. La imagen era funcional, pero el job matricial nunca enviaba `APP_VERSION` al Dockerfile del gateway, así que conservaba su default. El workflow ahora calcula el mismo short SHA de siete caracteres que usa como tag y lo pasa como build arg:
+
+```yaml
+build-args: |
+  APP_VERSION=${{ steps.sha.outputs.short }}
+```
+
+Este cambio necesita una imagen nueva: no puede reparar retroactivamente `705a98e`. Hasta publicar una corrida nueva desde `main`, el Rollout conserva estable `6d8d12d`, rechaza el candidato incorrectamente versionado y la Application permanece `Synced`/`Degraded` por ese aborto anterior.
+
+### 3. El sync reveló que `lookup + randAlphaNum` no era estable bajo ArgoCD
+
+Después del sync, `cron1` y `cron2` comenzaron a fallar aunque sus imágenes arrancaban. `cron1` mostró `Access denied for user 'user'`. Se compararon **hashes**, sin imprimir valores: las contraseñas del Secret `sa-platform-mysql` y del proceso MySQL no coincidían; ocurrió lo mismo con MongoDB. Los `managedFields` mostraron que `argocd-controller` había actualizado los Secrets a las `07:33Z`, mientras las bases seguían usando las credenciales con las que inicializaron sus volúmenes horas antes.
+
+Esto corrige una conclusión de la Fase 12: una prueba anterior no observó rotación, pero una reconciliación fresca sí demostró que el `lookup` de los templates no constituye persistencia confiable durante el render aislado de ArgoCD. Los valores aleatorios cambiaron sin cambiar la base ya inicializada.
+
+La corrección fue:
+
+- configurar `mysql.auth.existingSecret`, `mongodb.auth.existingSecret` y `auth.secrets.existingSecret` en `values-azure.yaml`;
+- configurar también `global.mysqlSecretName` y `global.mongodbSecretName` para que consumidores y subcharts apunten al mismo objeto;
+- versionar tres `SealedSecret` cifrados en el chart, activados solo en Azure;
+- mantener `sealedSecrets.enabled: false` en los perfiles local/kind, donde Helm continúa creando Secrets efímeros;
+- adoptar en AKS los Secrets existentes y restaurar MySQL/MongoDB con las credenciales activas de sus procesos, no con los valores ya rotados por Argo.
+
+Se reiniciaron Auth, Catalog y Orders de forma secuencial para que leyeran los valores restaurados. Los tres terminaron con `2/2` réplicas. Luego se ejecutaron Jobs manuales y temporales a partir de ambos CronJobs:
+
+```text
+cron1 -> Inserted record for 202203856 ...
+cron2 -> Published: {"event":"HOURLY_SUMMARY", ...}
+```
+
+Los dos Jobs de prueba se eliminaron después de guardar su salida. Los `SealedSecret` quedaron `Synced=True`, los hashes de Secret/proceso coinciden y Argo ya no incluye esos tres Secrets generados en su estado deseado.
+
+### 4. Otros dos efectos encontrados durante la recuperación
+
+- Las políticas de registry y non-root bloqueaban la recreación de NATS, MySQL y MongoDB porque son imágenes de terceros dentro de `sa-p5`. Se desactivó su autogen y se excluyeron únicamente los nombres exactos `sa-platform-{nats,mysql,mongodb}-0`. La primera versión usaba selectores de etiquetas, pero se endureció porque un Pod malicioso podía falsificar `app=mysql`; un dry-run confirmó que esa evasión ahora vuelve a ser rechazada, mientras los tres Pods reales siguen admitidos.
+- La cuota de `limits.cpu: 3` deja poco margen para el `maxSurge` de los Deployments. Durante los reinicios aparecieron rechazos transitorios de cuota, pero Kubernetes reintentó y los tres rollouts terminaron. No fue la causa del error original de Argo, pero debe considerarse si se aumentan réplicas o límites.
+
+### Estado al cerrar esta fase
+
+- ArgoCD: `Synced`, operación `Succeeded`.
+- Kyverno: verificación de firma otra vez en `Enforce`; allow y deny path comprobados en AKS.
+- MySQL/MongoDB/Auth: Secrets estables bajo Sealed Secrets.
+- Cron1/Cron2: ejecución funcional comprobada.
+- Rollout: `Degraded` de forma esperada para la imagen antigua `705a98e`, porque reporta `0.0.0-dev`. La corrección de build está lista localmente y requiere publicar una nueva imagen desde `main` para completar la promoción.

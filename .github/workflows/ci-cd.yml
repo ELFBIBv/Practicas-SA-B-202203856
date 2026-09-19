@@ -313,6 +313,10 @@ jobs:
             type=sha,prefix=,format=short
             type=semver,pattern={{version}}
 
+      - name: Calcular el short SHA (mismo valor que el tag de la imagen)
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
       # Build local (push: false) para poder escanear la imagen ANTES de
       # publicarla en GHCR. Nada se sube al registry todavía en este paso.
       - name: Build (local, sin publicar)
@@ -326,6 +330,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # Sin esto, el Dockerfile de api-gateway usa su default
+          # (APP_VERSION=0.0.0-dev) sin importar el commit real, y el
+          # endpoint /health que consulta Argo Rollouts en cada paso del
+          # canary nunca coincide con expected-version (el tag real de la
+          # imagen) — la promoción real a AKS aborta siempre, incluso con
+          # una imagen sana. Mismo short SHA que se usa como tag en todo el
+          # resto del pipeline (promote-to-gitops calcula
+          # ${GITHUB_SHA:0:7} y values-azure.yaml termina con ese mismo
+          # valor en image.tag) — tiene que coincidir exacto con lo que
+          # después compara el AnalysisTemplate como expected-version.
+          build-args: |
+            APP_VERSION=${{ steps.sha.outputs.short }}
 
       - name: Primer tag (referencia local para escanear/firmar)
         id: tagref
@@ -650,6 +666,18 @@ jobs:
             --namespace kyverno --create-namespace \
             --wait --timeout 180s
 
+      # La política verify-image-signatures referencia este Secret de forma
+      # explícita. Es efímero: solo existe dentro del clúster kind del job y
+      # usa el GITHUB_TOKEN de la propia corrida para leer las imágenes que
+      # build-and-push acaba de publicar.
+      - name: Configurar lectura de las imágenes privadas para Kyverno
+        run: |
+          kubectl create secret docker-registry ghcr-secret \
+            --namespace kyverno \
+            --docker-server="${{ env.REGISTRY }}" \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}"
+
       - name: Aplicar las 3 políticas de admisión
         run: |
           # Las políticas están acotadas al namespace sa-p5 (no a todo el
@@ -684,29 +712,41 @@ jobs:
           kubectl delete pod policy-check-outside-scope -n default --ignore-not-found
           echo "OK: fuera de sa-p5 el mismo pod no conforme no fue bloqueado (alcance acotado funcionando)."
 
-      - name: "Caso rechazado 2: imagen propia sin firma verificable (debe bloquearse)"
+      - name: "Caso rechazado 2: referencia propia no verificable (debe bloquearse)"
         run: |
           set +e
-          OUTPUT=$(kubectl run policy-check-unsigned -n sa-p5 --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-notification-service:${GITHUB_SHA:0:7}" --restart=Never 2>&1)
+          OUTPUT=$(kubectl run policy-check-unverifiable -n sa-p5 \
+            --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-notification-service:unpublished-${GITHUB_RUN_ID}" \
+            --restart=Never \
+            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true}}}' \
+            --dry-run=server -o name 2>&1)
           STATUS=$?
           echo "$OUTPUT"
           set -e
           if [ "$STATUS" -eq 0 ]; then
-            echo "ERROR: Kyverno debía rechazar este pod (sin runAsNonRoot y sin poder verificar firma en este clúster efímero) y no lo hizo."
+            echo "ERROR: Kyverno debía rechazar una referencia sin manifiesto/firma verificable y no lo hizo."
             exit 1
           fi
-          echo "$OUTPUT" | grep -q "verify-image-signatures\|require-non-root-user" || { echo "ERROR: no se activó ninguna política esperada."; exit 1; }
-          echo "OK: Kyverno rechazó correctamente el despliegue no conforme."
+          echo "$OUTPUT" | grep -q "verify-image-signatures" || { echo "ERROR: no se activó verify-image-signatures."; exit 1; }
+          if echo "$OUTPUT" | grep -q "UNAUTHORIZED"; then
+            echo "ERROR: Kyverno no usó correctamente ghcr-secret."
+            exit 1
+          fi
+          echo "OK: Kyverno falló cerrado ante una referencia propia no verificable."
 
-      # Nota: el camino "permitido" de verify-image-signatures (una imagen
-      # firmada que SÍ pasa la verificación) necesita que Kyverno pueda
-      # autenticarse contra GHCR para leer la firma de Cosign — este
-      # clúster kind efímero no tiene esas credenciales configuradas
-      # (a propósito: nadie las va a dejar tiradas en un runner temporal).
-      # Ese camino se valida más adelante, sobre el clúster AKS real, que
-      # sí va a tener el imagePullSecret ghcr-secret. Lo que este job
-      # demuestra es que las 3 políticas están activas y rechazan
-      # correctamente lo que no cumple, que es el requisito eliminatorio.
+      # La identidad admitida por la política está acotada a refs/heads/main,
+      # por eso el allow path solo corresponde en esa rama. Es un dry-run de
+      # admisión: no crea ni descarga un Pod, pero sí obliga a Kyverno a leer
+      # GHCR y verificar la firma Cosign del digest real.
+      - name: "Caso permitido: imagen firmada desde main (debe admitirse)"
+        if: github.ref == 'refs/heads/main'
+        run: |
+          kubectl run policy-check-signed -n sa-p5 \
+            --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-api-gateway:${GITHUB_SHA:0:7}" \
+            --restart=Never \
+            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true}}}' \
+            --dry-run=server -o name
+          echo "OK: Kyverno autenticó contra GHCR y aceptó la firma de main."
 
   # ---------------------------------------------------------------------
   # Etapa 4c: prueba de carga con k6, contra un despliegue baseline propio
