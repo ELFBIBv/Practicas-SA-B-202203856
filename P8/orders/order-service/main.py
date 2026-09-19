@@ -1,4 +1,5 @@
 import os
+import jwt
 import strawberry
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
@@ -14,11 +15,27 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 DB_NAME = os.getenv("DB_NAME", "orders_db")
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecret123")
 
 def get_db():
     return mysql.connector.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
     )
+
+
+def _authenticated_user_id(info: strawberry.types.Info) -> tuple[int, str]:
+    """Decodifica el JWT del header Authorization (mismo secreto que usa
+    auth-service) y devuelve (user_id, header original). Nunca confía en un
+    user_id que mande el cliente por GraphQL."""
+    request = info.context["request"]
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise Exception("Se requiere autenticación para crear una orden.")
+    try:
+        payload = jwt.decode(auth_header[len("Bearer "):], JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise Exception("Token inválido o expirado.")
+    return payload["id"], auth_header
 
 @strawberry.type
 class OrderItem:
@@ -50,16 +67,21 @@ class Query:
 @strawberry.type
 class Mutation:
     @strawberry.mutation
-    def create_order(self, user_id: int, product_id: str, quantity: int) -> Order:
-        # 1. Consultar el servicio de catálogo para validar y obtener precio/stock
+    def create_order(self, info: strawberry.types.Info, product_id: str, quantity: int) -> Order:
+        # El user_id sale del JWT validado, nunca de un argumento que
+        # mande el cliente (antes se podía crear una orden a nombre de
+        # cualquier otro usuario con solo cambiar el user_id enviado).
+        user_id, auth_header = _authenticated_user_id(info)
+
+        # 1. Consultar el servicio de catálogo para obtener el precio oficial
         catalog_url = os.getenv("CATALOG_SERVICE_URL", "http://catalog-service:8000/graphql")
-        
+        forward_headers = {"Authorization": auth_header}
+
         query = """
         query($id: String!) {
             product(id: $id) {
                 id
                 price
-                stock
             }
         }
         """
@@ -67,18 +89,22 @@ class Mutation:
             res = httpx.post(catalog_url, json={"query": query, "variables": {"id": product_id}}, timeout=5.0)
             res_data = res.json()
             product_data = res_data.get("data", {}).get("product")
-            
+
             if not product_data:
                 raise Exception("El producto no existe en el catálogo.")
-            if product_data["stock"] < quantity:
-                raise Exception(f"Stock insuficiente. Stock actual: {product_data['stock']}")
-                
+
             # Usar el precio oficial en lugar del proporcionado por el usuario
             official_unit_price = product_data["price"]
         except httpx.RequestError as e:
             raise Exception(f"Error al comunicarse con el catálogo: {str(e)}")
 
-        # 2. Descontar stock en el catálogo
+        # 2. Descontar stock en el catálogo. Este paso es la única fuente de
+        # verdad sobre si hay stock suficiente: es una operación atómica en
+        # catalog-service (find_one_and_update con el stock mínimo como
+        # parte del filtro), así que dos compras concurrentes no pueden
+        # descontar más stock del que en verdad existe. Se reenvía el
+        # Authorization del comprador porque updateProductStock exige un
+        # caller autenticado.
         mutation = """
         mutation($id: String!, $qty: Int!) {
             updateProductStock(id: $id, quantityToDiscount: $qty) {
@@ -88,35 +114,43 @@ class Mutation:
         }
         """
         try:
-            res_mut = httpx.post(catalog_url, json={"query": mutation, "variables": {"id": product_id, "qty": quantity}}, timeout=5.0)
+            res_mut = httpx.post(
+                catalog_url,
+                json={"query": mutation, "variables": {"id": product_id, "qty": quantity}},
+                headers=forward_headers,
+                timeout=5.0,
+            )
             res_mut_data = res_mut.json()
             if res_mut_data.get("errors"):
                 raise Exception(f"Error al descontar el stock: {res_mut_data['errors']}")
+            if res_mut_data.get("data", {}).get("updateProductStock") is None:
+                raise Exception("Stock insuficiente para completar la orden.")
         except httpx.RequestError as e:
             raise Exception(f"Error al descontar stock en el catálogo: {str(e)}")
 
-        # 3. Guardar orden en base de datos
+        # 3. Guardar orden en base de datos (solo se llega acá si el
+        # descuento de stock ya tuvo éxito de verdad).
         conn = get_db()
         cur = conn.cursor(dictionary=True)
         total = quantity * official_unit_price
-        
+
         # 4. Insertar orden
         cur.execute("INSERT INTO orders (user_id, total, status) VALUES (%s, %s, %s)", (user_id, total, "PENDING"))
         order_id = cur.lastrowid
-        
+
         cur.execute("SELECT created_at FROM orders WHERE id = %s", (order_id,))
         order_record = cur.fetchone()
         created_at = order_record['created_at']
-        
+
         # 5. Insertar detalle de orden
         cur.execute("INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (%s, %s, %s, %s)", (order_id, product_id, quantity, official_unit_price))
-        
+
         conn.commit()
         conn.close()
 
         # 3. Llamar al servicio de notificaciones asíncronamente con NATS
         nats_url = os.getenv("NATS_URL", "nats://sa-platform-nats:4222")
-        
+
         async def publish_event():
             try:
                 nc = await nats.connect(nats_url)
@@ -124,7 +158,7 @@ class Mutation:
                 await nc.close()
             except Exception as e:
                 print("No se pudo enviar la notificación a NATS:", e)
-        
+
         # Como estamos en una función síncrona, usamos asyncio para ejecutar
         try:
             loop = asyncio.get_running_loop()

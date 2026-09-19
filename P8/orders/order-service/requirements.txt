@@ -4,6 +4,7 @@ strawberry-graphql[fastapi]==0.209.0
 mysql-connector-python==9.0.0
 httpx==0.27.2
 nats-py==2.2.0
+PyJWT==2.14.0
 # anyio<4.0.0 venía fijado por fastapi==0.103.1; la 3.7.1 que resolvía tenía
 # una CVE CRITICAL (CVE-2026-63374). fastapi==0.108.0 es la primera versión
 # que deja de fijar anyio (queda a cargo de starlette, que sí permite <5),

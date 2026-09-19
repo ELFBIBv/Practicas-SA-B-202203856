@@ -22,6 +22,12 @@ spec:
           - resources:
               kinds:
                 - Pod
+              # Acotada a sa-p5: sin esto, la política aplica a TODO el
+              # clúster (kube-system, argocd, kyverno, sealed-secrets...) y
+              # puede bloquear reinicios o actualizaciones de componentes
+              # de plataforma que nunca pasaron por ghcr.io/elfbibv.
+              namespaces:
+                - sa-p5
       validate:
         message: >-
           Solo se permiten imágenes de ghcr.io/elfbibv/* (política de la

@@ -56,6 +56,15 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.natsAuthSecretName }}
                   key: NATS_URL
+            # Mismo secreto que usa auth-service para firmar los JWT — así
+            # orders puede verificar el token localmente y tomar el
+            # user_id de ahí, en vez de aceptarlo como argumento del
+            # cliente en create_order.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-auth-secrets" .Release.Name | quote }}
+                  key: JWT_SECRET
           livenessProbe:
             httpGet:
               path: /

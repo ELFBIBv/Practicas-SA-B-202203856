@@ -23,13 +23,23 @@ spec:
           - resources:
               kinds:
                 - Pod
+              # Acotada a sa-p5, mismo motivo que restrict-image-registries.
+              namespaces:
+                - sa-p5
       verifyImages:
         - imageReferences:
             - "ghcr.io/elfbibv/*"
           attestors:
             - entries:
                 - keyless:
-                    subject: "https://github.com/ELFBIBv/Practicas-SA-B-202203856/.github/workflows/ci-cd.yml@refs/heads/*"
+                    # Solo main: promote-to-gitops (ver ci-cd.yml) ya exige
+                    # github.ref == 'refs/heads/main' para poder proponer
+                    # un despliegue, así que cualquier imagen que de verdad
+                    # llegue a producción fue construida y firmada desde
+                    # main — aceptar refs/heads/* además era innecesario y
+                    # dejaba que una firma generada desde cualquier otra
+                    # rama pasara la verificación igual.
+                    subject: "https://github.com/ELFBIBv/Practicas-SA-B-202203856/.github/workflows/ci-cd.yml@refs/heads/main"
                     issuer: "https://token.actions.githubusercontent.com"
                     rekor:
                       url: https://rekor.sigstore.dev

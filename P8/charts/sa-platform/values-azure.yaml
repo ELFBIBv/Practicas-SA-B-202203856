@@ -7,6 +7,13 @@ global:
   mysqlSecretName: ""
   mongodbSecretName: ""
   natsAuthSecretName: sa-platform-nats-auth
+  # En azure ese secreto ya lo gestiona un SealedSecret (ver
+  # CAMBIOS-GITOPS.md, Fase 10) — si el chart también intenta crearlo
+  # (nats-secret.yaml), quedan dos dueños distintos para el mismo objeto.
+  # false acá deja al SealedSecret como única fuente de verdad; en kind
+  # (values-kind.yaml, que no sobreescribe esto) sigue en true porque ahí
+  # no hay Sealed Secrets — el chart se autogestiona el secreto entero.
+  natsAuthSecretCreate: false
 
 mysql:
   enabled: true

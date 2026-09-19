@@ -3,6 +3,10 @@ charts/sa-platform/charts/*.tgz
 charts/sa-platform/charts/nats/
 charts/sa-platform/charts/redis/
 
-# Reporte de la prueba de carga (k6): se regenera en cada corrida, no se
-# versiona — la evidencia real queda como artifact del run de CI.
+# Reporte de la prueba de carga (k6): las corridas locales/ad-hoc no se
+# versionan (se regeneran cada vez), pero sí se versiona una referencia
+# real de una corrida de CI en verde (reporte-referencia.json) — es la
+# "ruta del archivo dentro del repositorio" que pide la tabla obligatoria
+# del README, no solo el script.
 loadtest/reporte-*.json
+!loadtest/reporte-referencia.json
