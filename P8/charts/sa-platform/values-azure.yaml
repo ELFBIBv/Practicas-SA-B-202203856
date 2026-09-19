@@ -198,5 +198,7 @@ cronjobs:
 quota:
   requestsCpu: "2"
   requestsMemory: 5Gi
-  limitsCpu: "3"
+  # El uso agregado de limits ronda 2950m. 3150m permite el maxSurge
+  # más grande (200m) y sigue por debajo del techo Terraform de 3200m.
+  limitsCpu: "3150m"
   limitsMemory: 7Gi

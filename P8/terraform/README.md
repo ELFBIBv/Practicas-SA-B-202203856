@@ -23,7 +23,7 @@ No es redundante ni conflictivo: en Kubernetes, si un namespace tiene varias `Re
 Con el clúster de 2 nodos `Standard_DS2_v2` que crea `az aks create` en `P8/README.md`, la capacidad real asignable (descontando las reservas de sistema de AKS, antes de sumar lo que ya consumen `coredns`/`metrics-server`/CNI) es de **~3.9 vCPU y ~10Gi de memoria en total**. Por eso:
 
 - `platform_quota` (este módulo): `requests 2.5 / limits 3.2 vCPU`, `requests 6Gi / limits 8Gi` — deja margen real debajo de esa capacidad física.
-- `quota:` del chart de Helm (`values-azure.yaml`): `requests 2 / limits 3 vCPU`, `requests 5Gi / limits 7Gi` — queda por debajo del techo de plataforma, manteniendo el orden `plataforma > app`.
+- `quota:` del chart de Helm (`values-azure.yaml`): `requests 2 / limits 3.15 vCPU`, `requests 5Gi / limits 7Gi` — deja espacio para un `maxSurge` de 200m y queda por debajo del techo de plataforma, manteniendo el orden `plataforma > app`.
 - Consumo real observado (sumando todas las réplicas, con margen para el pico transitorio del canary): ~1.2–1.7 vCPU, ~1.5–2.1Gi — bien por debajo de ambos techos.
 
 Si en algún momento se agranda el node pool, estos tres niveles se pueden recalcular con la misma lógica; no son números "redondos" elegidos al azar.
