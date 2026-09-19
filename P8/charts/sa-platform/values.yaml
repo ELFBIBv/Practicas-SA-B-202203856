@@ -10,6 +10,11 @@ global:
   natsAuthSecretCreate: true
   natsAuthSecretName: sa-platform-nats-auth
 
+# Los valores cifrados están ligados al nombre/namespace del clúster AKS.
+# Los entornos locales y kind conservan los Secrets generados por Helm.
+sealedSecrets:
+  enabled: false
+
 mysql:
   enabled: true
   auth:

@@ -241,21 +241,20 @@ cd ../..
 
 Guardar `plan.log`, `apply.log` y la salida de ese último `kubectl get` como evidencia — van enlazados desde la tabla de enlaces obligatoria.
 
-### 4. Crear los secretos que el chart necesita (manual, ya no vía CI)
+### 4. Instalar Sealed Secrets y preparar los secretos externos
 
-> Desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), estos secretos ya no los crea el pipeline (antes lo hacía el job `deploy-to-aks`, hoy eliminado). Se crean una sola vez, a mano, contra el clúster real.
+> Desde la Fase 13 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), el perfil Azure no genera contraseñas con Helm. MySQL, MongoDB y Auth consumen `existingSecret`, y sus valores cifrados viven en [`templates/sealed-secrets.yaml`](charts/sa-platform/templates/sealed-secrets.yaml). Esto evita que un nuevo render de ArgoCD rote credenciales de una base ya inicializada.
 
-**Si el repo GitOps ya tiene una carpeta `sealed-secrets/`** (de una migración anterior a Sealed Secrets, ver Fase 10 de `CAMBIOS-GITOPS.md`), no hace falta recrear los valores a mano — alcanza con instalar el controlador y aplicar esos manifiestos ya cifrados:
+El controlador debe existir **antes** del primer sync de la aplicación:
 
 ```bash
 helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
 helm install sealed-secrets-controller sealed-secrets/sealed-secrets -n kube-system --wait --timeout 180s
-kubectl apply -f sealed-secrets/   # dentro del clon del repo GitOps
 ```
 
-**Ojo:** los `SealedSecret` están cifrados contra la clave del controlador de un clúster específico. Si este es un clúster nuevo (no el mismo `aks-sa-p8` de antes), esos archivos no van a descifrar — hay que crear los secretos a mano una vez (como abajo) y volver a cifrarlos contra el controlador nuevo.
+**Ojo:** los `SealedSecret` del chart están cifrados contra la clave del controlador del AKS actual. En un clúster nuevo hay que volver a cifrar `sa-platform-mysql`, `sa-platform-mongodb` y `sa-platform-auth-secrets` con el certificado de ese controlador y sustituir el ciphertext del template antes del sync. También conviene respaldar la clave del controlador: sin ella, el ciphertext existente no puede recuperarse después de recrear el clúster.
 
-Dos secretos, por dos motivos distintos:
+Quedan dos secretos externos que no están embebidos en el chart, por dos motivos distintos. Se pueden crear una vez como abajo o aplicar sus `SealedSecret` ya cifrados si se conservan los de la Fase 10:
 
 **`ghcr-secret`** — para que el clúster pueda bajar las imágenes privadas de GHCR. En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. El namespace ya lo creó Terraform en el paso anterior:
 

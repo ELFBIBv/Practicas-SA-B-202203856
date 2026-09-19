@@ -3,6 +3,13 @@ kind: ClusterPolicy
 metadata:
   name: verify-image-signatures
   annotations:
+    # La verificación se hace cuando se crea el Pod real. Evitar el autogen
+    # para Deployment/StatefulSet/Job/CronJob impide que Kyverno intente
+    # resolver la imagen privada desde la plantilla del controlador, donde
+    # no reutiliza de forma fiable los imagePullSecrets del Pod. No reduce
+    # la protección: ningún contenedor puede ejecutarse sin crear antes un
+    # Pod que pase esta misma regla en modo Enforce.
+    pod-policies.kyverno.io/autogen-controllers: none
     policies.kyverno.io/title: Verificar firma Cosign de la imagen
     policies.kyverno.io/category: Cadena de suministro (sa-platform)
     policies.kyverno.io/severity: critical
@@ -29,6 +36,12 @@ spec:
       verifyImages:
         - imageReferences:
             - "ghcr.io/elfbibv/*"
+          # Evita depender exclusivamente de --imagePullSecrets del
+          # admission controller. Este Secret existe en el namespace de
+          # Kyverno y contiene las mismas credenciales que el de sa-p5.
+          imageRegistryCredentials:
+            secrets:
+              - ghcr-secret
           attestors:
             - entries:
                 - keyless:

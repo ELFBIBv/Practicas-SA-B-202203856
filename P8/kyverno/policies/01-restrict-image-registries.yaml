@@ -3,6 +3,10 @@ kind: ClusterPolicy
 metadata:
   name: restrict-image-registries
   annotations:
+    # La decisión final se toma sobre el Pod que realmente ejecutará la
+    # imagen. Así las excepciones de infraestructura pueden usar nombres de
+    # Pod exactos y no selectores de etiquetas fáciles de falsificar.
+    pod-policies.kyverno.io/autogen-controllers: none
     policies.kyverno.io/title: Restringir registries de imágenes permitidos
     policies.kyverno.io/category: Cadena de suministro (sa-platform)
     policies.kyverno.io/severity: high
@@ -28,6 +32,18 @@ spec:
               # de plataforma que nunca pasaron por ghcr.io/elfbibv.
               namespaces:
                 - sa-p5
+      # NATS/MySQL/MongoDB son subcharts de terceros. Se excluyen sus tres
+      # Pods conocidos por nombre exacto; una etiqueta como app=mysql no es
+      # suficiente para evadir la política. Ver CAMBIOS-GITOPS.md, Fase 13.
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - sa-p5
+              names:
+                - sa-platform-nats-0
+                - sa-platform-mysql-0
+                - sa-platform-mongodb-0
       validate:
         message: >-
           Solo se permiten imágenes de ghcr.io/elfbibv/* (política de la
