@@ -6,6 +6,8 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 
 ## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
 
+> **Nota sobre acceso:** el repositorio de código es privado (el repo GitOps sí es público). Los links a runs de GitHub Actions de abajo requieren estar autenticado con una cuenta que tenga acceso al repo.
+
 | Ítem | Enlace o dato requerido |
 | --- | --- |
 | Repositorio GitOps | https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops |
@@ -14,8 +16,8 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | Reversión automática | Run: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632563 — Rollout `sa-platform-api-gateway`, revisión 3 abortada automáticamente (`Status: ✖ Degraded`, canary escalado a 0 réplicas). Detalle completo en [`informe-incidente.md`](informe-incidente.md). Corresponde al `kind` efímero del pipeline, no a AKS todavía. |
 | Despliegue rechazado por política | **Contra el clúster AKS real** (`aks-sa-p8`): `kubectl run policy-check-external-image --image=nginx:latest` rechazado por `restrict-image-registries` + `require-non-root-user`. Y el camino permitido, también verificado ahí: una imagen real firmada (`ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e...`) fue **admitida** tras verificar su firma de Cosign de verdad (`verify-image-signatures`). Detalle completo en `CAMBIOS-GITOPS.md`, Fase 9. (Evidencia adicional del mismo rechazo en el `kind` efímero de CI: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632485) |
 | Bloqueo por vulnerabilidad crítica | PR bloqueado: https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1 — job fallido (3 CVE CRITICAL en `api-gateway`, ver también otros 5 servicios bloqueados en el mismo PR): https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35315634021/job/105506751987?pr=1 |
-| Imagen firmada | `ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e02de72c2092a554fba5ed3e1da8b1331091c38ccb3a8bc262b9763` — firmada con Cosign (keyless/OIDC) en https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105696917236 |
-| Reporte de prueba de carga | Script: [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js). Corrida real en verde: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632524 (reporte JSON subido como artifact de ese job). |
+| Imagen firmada | `ghcr.io/elfbibv/sa-api-gateway:9f7bd5e` (`ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e02de72c2092a554fba5ed3e1da8b1331091c38ccb3a8bc262b9763`) — firmada con Cosign (keyless/OIDC) en https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105696917236. **Nota:** esta corrida es anterior al fix de la Fase 11 (el digest firmado no coincidía con el publicado) — PENDIENTE reemplazar por la referencia de la próxima corrida fresca, que sí firma el digest correcto. |
+| Reporte de prueba de carga | [`P8/loadtest/reporte-referencia.json`](loadtest/reporte-referencia.json) — reporte real de k6, descargado del artifact de una corrida en verde (script: [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js), run: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632524). Cada corrida nueva genera su propio reporte como artifact del job; este archivo es la referencia versionada. |
 | Video demostrativo | PENDIENTE |
 
 ## Estado actual
@@ -87,7 +89,7 @@ flowchart TD
     end
 ```
 
-Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El job `promote-to-gitops` (Etapa 5) no tiene credenciales de Azure ni acceso al clúster: solo abre un PR en el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops). Quien realmente aplica el cambio es ArgoCD, todavía pendiente de instalar (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)). El siguiente diagrama muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez aplicado el chart — es la misma topología tanto en `kind` (Etapa 4, vía `helm upgrade --install` efímero dentro del job) como en AKS (vía ArgoCD), solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
+Este diagrama de arriba muestra el **proceso** del pipeline (los pasos de GitHub Actions). El job `promote-to-gitops` (Etapa 5) no tiene credenciales de Azure ni acceso al clúster: solo abre un PR en el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops). Quien realmente aplica el cambio es ArgoCD, ya instalado y sincronizando en el clúster real (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), Fase 8). El siguiente diagrama muestra algo distinto: la **arquitectura que queda corriendo dentro del clúster** una vez aplicado el chart — es la misma topología tanto en `kind` (Etapa 4, vía `helm upgrade --install` efímero dentro del job) como en AKS (vía ArgoCD), solo cambia dónde vive el clúster y cuántas réplicas tiene cada servicio (`values-kind.yaml` usa 1 réplica por servicio para caber en el runner; `values-azure.yaml` usa 2).
 
 ## Arquitectura de despliegue (qué corre dentro del clúster)
 
@@ -367,7 +369,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 
 - **Build + Test + Dockerización:** se disparan solos con cualquier `push` o `pull_request`, sin acción adicional ni credenciales de ningún tipo.
 - **Deploy efímero en kind:** se dispara solo, automáticamente, después de cada `push` (no corre en Pull Requests, porque ahí no se publica ninguna imagen que descargar).
-- **Proponer la promoción a producción (PR al repo GitOps):** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere el secret `GITOPS_PAT`. El cambio real al clúster ocurre después, cuando se mergea el PR y ArgoCD sincroniza (instalación pendiente).
+- **Proponer la promoción a producción (PR al repo GitOps):** pestaña **Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, marcar el checkbox `deploy` y ejecutar. Requiere el secret `GITOPS_PAT`. El cambio real al clúster ocurre después, cuando se mergea el PR y ArgoCD sincroniza (ya instalado y con `syncPolicy.automated` activado).
 
 ## Documentación técnica del flujo
 
@@ -377,7 +379,7 @@ az group delete --name "$RESOURCE_GROUP" --yes --no-wait
 4. **Escaneo de seguridad (Trivy) y SBOM:** cada imagen recién construida se escanea dos veces: un reporte completo (`CRITICAL,HIGH`, no bloqueante, subido como artifact del run) y un escaneo bloqueante (`CRITICAL`, `exit-code: 1`) que corre también en Pull Requests. Si hay una vulnerabilidad crítica, el job falla ahí mismo y la imagen **nunca llega a publicarse** en GHCR. Si pasa, se genera un SBOM (CycloneDX, también vía Trivy) y se sube como artifact.
 5. **Push a GHCR + firma con Cosign:** en cualquier evento que no sea un Pull Request, recién acá se publican las imágenes en `ghcr.io/elfbibv/*` (reutilizando el build del paso 3, sin reconstruir nada), se firman con Cosign en modo *keyless* (OIDC de GitHub, sin llaves privadas en secrets) y se les adjunta el SBOM generado.
 6. **Deploy efímero en kind (automático):** una vez que `build-and-push` publicó las 7 imágenes en GHCR (nunca antes: se sigue el principio "build once, deploy many"), el job `deploy-kind` descarga esas mismas imágenes con `docker pull` (usando el tag de sha corto del commit), crea un clúster real de Kubernetes con [`kind`](https://kind.sigs.k8s.io/) dentro del propio runner, las carga ahí con `kind load docker-image`, y aplica el chart completo (`helm upgrade --install` con `values.yaml` + `values-dev.yaml` + `values-kind.yaml`). Verifica que todos los pods, PVCs, Services y CronJobs se creen correctamente. El clúster se destruye automáticamente al terminar el job (la acción `helm/kind-action` lo limpia). No corre en Pull Requests (ahí `build-and-push` no publica nada). Esto prueba que el chart de Helm funciona de verdad, con la imagen real que se acaba de publicar, sin depender de Azure ni de ningún secret adicional.
-7. **Promoción GitOps (manual):** sin tocar el clúster ni Azure, sincroniza `P8/charts/sa-platform` hacia el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops), sobreescribe el tag de cada imagen con el commit corto que disparó el workflow, y abre un Pull Request contra `main` de ese repo. ArgoCD (instalación pendiente) es quien realmente aplica el cambio al clúster cuando ese PR se mergea.
+7. **Promoción GitOps (manual):** sin tocar el clúster ni Azure, sincroniza `P8/charts/sa-platform` hacia el repositorio [`Practicas-SA-B-202203856-gitops`](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops), sobreescribe el tag de cada imagen con el commit corto que disparó el workflow, y abre un Pull Request contra `main` de ese repo. ArgoCD (ya instalado en el clúster real) es quien realmente aplica el cambio cuando ese PR se mergea.
 
 ## Evidencia de ejecución
 

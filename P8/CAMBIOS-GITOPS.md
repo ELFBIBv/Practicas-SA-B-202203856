@@ -219,7 +219,7 @@ Se comparó el resto de los pasos de `load-test` contra `deploy-kind` uno por un
 
 **Qué se hizo:** se agregaron [`P8/informe-incidente.md`](informe-incidente.md) y [`P8/diagrama-flujo.md`](diagrama-flujo.md), los dos entregables del enunciado que no dependen de tener un AKS real levantado.
 
-El informe de incidente usa los 5 campos exactos que pide la sección 4.2 del enunciado (qué falló, cómo se detectó, cómo se contuvo, tiempo de recuperación, cómo prevenirlo), con datos tomados directamente de los logs reales de la corrida 35374724033 — no inventados: el mensaje de error real de Argo Rollouts (`received non 2xx response code: 500`), los timestamps exactos del fallo inducido y de la contención (17.7 segundos calculados restando los dos timestamps reales), y el estado real de los `ReplicaSet`/`AnalysisRun` (`SetWeight: 0`, `ActualWeight: 0`, confirmando 0% de tráfico real expuesto).
+El informe de incidente usa los 5 campos exactos que pide la sección 4.2 del enunciado (qué falló, cómo se detectó, cómo se contuvo, tiempo de recuperación, cómo prevenirlo), con datos tomados directamente de los logs reales de la corrida 35374724033 — no inventados: el mensaje de error real de Argo Rollouts (`received non 2xx response code: 500`), los timestamps exactos del fallo inducido y de la contención (17.7 segundos calculados restando los dos timestamps reales), y el estado real de los `ReplicaSet`/`AnalysisRun` tras el aborto (`SetWeight: 0`, `ActualWeight: 0`, confirmando que el tráfico hacia el canario se cortó por completo en ese momento — no que haya sido 0% durante toda la ventana de análisis previa; ver la corrección de esta nota en `informe-incidente.md`, sección "Cómo se contuvo").
 
 El diagrama es Mermaid embebido en Markdown (GitHub lo renderiza nativo, sin depender de ninguna herramienta externa ni de generar una imagen aparte). Se validó que el diagrama efectivamente renderiza sin errores de sintaxis instalando `@mermaid-js/mermaid-cli` y su Chrome headless localmente, generando un SVG real a partir del mismo bloque `mermaid` del archivo, y revisando que la estructura del SVG resultante (todos los nodos, las 3 ramas de validación en rojo, el nodo de rollback) coincidiera con lo esperado — no se asumió que iba a renderizar bien solo por tener sintaxis "razonable".
 
@@ -446,3 +446,110 @@ Con eso, `kubectl get sealedsecret` mostró `SYNCED: True` y el `Secret` resulta
 Los dos archivos `SealedSecret` resultantes (cifrados, seguros de versionar) se prepararon en un clon local del repo GitOps, en una carpeta nueva `sealed-secrets/` con su propio README explicando cómo se generan y qué pasa si el clúster se recrea desde cero. **No se publicaron** — en un entorno académico, con la migración ya verificada funcionando de punta a punta contra el clúster real (que es lo que demuestra la práctica), no había necesidad real de además abrir un PR y mergearlo en un repositorio aparte solo para dejar una copia de los mismos archivos cifrados. El paso 4 del procedimiento del README documenta igual cómo se generarían y aplicarían, para quien sí lo necesite.
 
 **Por qué:** el propio README del repo GitOps ya dejaba anotado desde la Fase 8 que los secretos creados a mano eran un paso intermedio, pendiente de migrar. Con Sealed Secrets, el valor cifrado sí puede vivir en el repo público sin exponer nada — solo el controlador del clúster real puede descifrarlo — cerrando la única pieza de la cadena de suministro que hasta ahora dependía de un paso manual fuera de cualquier control de versiones.
+
+## Fase 11 — Bug real en Cosign: se firmaba el digest equivocado
+
+**Qué pasó:** al mergear el PR #3 del repo GitOps (la primera corrida fresca de punta a punta, con Kyverno ya instalado en el clúster real desde la Fase 9), ArgoCD falló el sync con `1 Error`, `App Health: Degraded`. El mensaje real:
+
+```
+admission webhook "mutate.kyverno.svc-fail" denied the request:
+resource Deployment/sa-p5/sa-platform-auth was blocked due to the following policies
+verify-image-signatures:
+  autogen-verify-signature: 'failed to verify image ghcr.io/elfbibv/sa-auth-service:d9044d7:
+  ... UNAUTHORIZED: authentication required' (retried 3 times)
+```
+
+**Primer diagnóstico (y primer callejón sin salida):** parecía el mismo problema de credenciales de la Fase 9. Se verificó que el token seguía siendo válido (`docker login` + `docker pull` reales con exactamente esas credenciales: funcionaron perfecto) y que el flag `--imagePullSecrets=ghcr-secret` seguía presente en el deployment de Kyverno. Se probó igual reiniciar el pod del admission controller por si había cacheado un token de GHCR vencido (esos tokens duran pocos minutos) — `kubectl rollout restart deployment kyverno-admission-controller -n kyverno`. Con eso el error **cambió**, de `UNAUTHORIZED` a `no signatures found`: confirma que sí era un tema de caché de autenticación, pero destapó un problema distinto y más serio debajo.
+
+**El problema real:** se comparó el digest que Kyverno intentaba verificar contra lo que de verdad estaba publicado en GHCR:
+
+```bash
+docker buildx imagetools inspect ghcr.io/elfbibv/sa-auth-service:d9044d7 --format '{{json .Manifest}}'
+# digest real publicado: sha256:cc4a9ee6...
+
+docker buildx imagetools inspect ghcr.io/elfbibv/sa-auth-service:sha256-cc4a9ee6....sig
+# ERROR: not found — no existe firma para ese digest
+```
+
+Revisando el log real del job `Build & Push: auth-service` de esa corrida, el paso "Firmar la imagen con Cosign" sí reportó éxito — pero firmó otro digest: `sha256:b71e14c4...`, que es el digest de **`steps.build.outputs.digest`**, el de la build *local* (`push: false, load: true`) que se hace para poder escanear con Trivy antes de publicar nada. El digest que de verdad queda publicado tras el `docker push` (`cc4a9ee6...`) es distinto — BuildKit agrega provenance/attestations al pushear que cambian el digest del manifest respecto al build local. El pipeline llevaba firmando el digest equivocado **desde la Fase 3**, y nadie lo había notado porque hasta la Fase 9 nada verificaba la firma contra el digest realmente publicado — Cosign reportaba éxito igual, solo que firmando una referencia que nunca llegó a existir en el registry bajo ese digest.
+
+**Fix real, en `ci-cd.yml`:** capturar el digest **después** del `docker push`, no reusar el del build local:
+
+```bash
+# en el step "Publicar en GHCR", después de pushear cada tag:
+digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$first_tag" | sed 's/^.*@//')
+echo "digest=$digest" >> "$GITHUB_OUTPUT"
+# y en "Firmar la imagen con Cosign": DIGEST="${{ steps.push.outputs.digest }}"
+# en vez de steps.build.outputs.digest
+```
+
+**Verificado antes de aplicar el fix, no a ciegas:** se confirmó a mano que `docker inspect --format='{{index .RepoDigests 0}}'` sobre la imagen recién pusheada sí devuelve el digest real y correcto (`cc4a9ee6...`), coincidiendo con lo que reporta `docker buildx imagetools inspect` contra el registry.
+
+**Por qué importa:** esto es exactamente el tipo de bug que **Kyverno existe para atrapar** — la cadena de suministro llevaba meses "firmando" imágenes cuya firma nunca hubiera pasado una verificación real, porque nada la verificaba de verdad hasta que se instaló Kyverno contra el clúster real con `verifyImages` activo. Es la mejor evidencia posible de por qué la política 3 (`verify-image-signatures`) no es un ejercicio cosmético: encontró un bug real que Trivy, los tests y el resto del pipeline nunca hubieran detectado.
+
+**Qué falta:** disparar de nuevo `workflow_dispatch` con este fix ya en `main`, para que las imágenes se firmen con el digest correcto esta vez, y repetir el ciclo PR al repo GitOps → merge → ArgoCD sincroniza — ahora sí debería quedar `Synced`/`Healthy` sin el error de Kyverno.
+
+## Fase 12 — Revisión externa (Codex): 7 hallazgos, verificados y corregidos
+
+**Qué pasó:** se compartió una revisión de otro asistente (Codex) sobre el estado del proyecto en este punto. Antes de tocar nada se verificó cada hallazgo contra el código y el clúster real — no se asumió que la revisión tuviera razón solo por venir de otra IA. Los 7 resultaron reales. Se corrigieron los 7, incluyendo dos (Auth y Orders) que son código de **P5**, no de P8 — decisión explícita del usuario, dado que son vulnerabilidades reales y esta entrega es la que tiene sentido para endurecerlas.
+
+### 1. `promote-to-gitops` no esperaba las 3 validaciones, y corría desde cualquier rama
+
+Verificado leyendo `ci-cd.yml`: `needs: build-and-push` solamente (no `deploy-kind`/`kyverno-policy-check`/`load-test`, que corren en paralelo), y el `if` no chequeaba `github.ref`. Fix:
+
+```yaml
+needs: [build-and-push, deploy-kind, kyverno-policy-check, load-test]
+if: >-
+  github.event_name == 'workflow_dispatch' &&
+  github.event.inputs.deploy == 'true' &&
+  github.ref == 'refs/heads/main'
+```
+
+No hace falta `always()`: si cualquiera de los 4 falla, GitHub Actions salta `promote-to-gitops` por default. Además, el enunciado exige `helm lint` en el pipeline (sección 3.3 y rúbrica 2.2, 8 puntos) y no corría en ningún lado — se agregó como gate antes de proponer el PR, con `--strict` contra `values-azure.yaml` (el que de verdad llega a producción). Probado: `helm lint --strict` pasa limpio (`0 chart(s) failed`).
+
+### 2. El README tenía frases desactualizadas y evidencia con formato incompleto
+
+- 3 frases "ArgoCD... pendiente de instalar" que ya no eran ciertas (quedaron así desde antes de la Fase 8) — corregidas.
+- "Imagen firmada" solo mostraba el digest; el enunciado pide `registro/imagen:tag`. Se agregó también la referencia por tag.
+- "Reporte de prueba de carga" enlazaba el script y un artifact, pero el JSON estaba en `.gitignore` — no había ninguna "ruta del archivo" real que resolviera. Se descargó el reporte real de una corrida en verde y se versionó como `P8/loadtest/reporte-referencia.json`, con una excepción en `.gitignore` (`!loadtest/reporte-referencia.json`) para que las corridas ad-hoc locales sigan sin versionarse pero esta referencia sí.
+- Se confirmó que el repo de código es **privado** (`gh repo view --json visibility`) — los links a runs de Actions requieren estar autenticado. Se le preguntó al usuario cómo resolverlo (agregar colaborador / hacerlo público / dejar como está); respondió que el profesor ya tiene acceso, así que se agregó una nota aclaratoria en el README en vez de cambiar la visibilidad del repo por cuenta propia.
+
+### 3. `sa-platform-nats-auth`: choque real entre Helm y el SealedSecret
+
+Se probó en vivo antes de asumir nada: se forzó un sync real de ArgoCD y se compararon los 4 secrets que Codex señaló (`auth-secrets`, `mongodb`, `mysql`, `nats-auth`) antes y después — **no cambiaron**, así que el `lookup` de Helm sí funciona correctamente contra nuestro ArgoCD real (la non-determinismo que describe Codex es real solo para `helm template`/`lint` sin contexto de clúster vivo, como corre él mismo localmente, no para un sync real). Lo que sí era un problema real: `natsAuthSecretCreate: true` seguía activo en `values-azure.yaml` (heredado de `values.yaml`), o sea que el chart *también* intentaba gestionar el mismo secret que ya gestiona el `SealedSecret` de la Fase 10. Fix: `natsAuthSecretCreate: false` en `values-azure.yaml` únicamente (en `kind`, sin Sealed Secrets, se mantiene en `true`). Verificado con `helm template`: ya no se renderiza ningún `Secret` con ese nombre en azure, y sí se sigue renderizando en kind.
+
+### 4. Evidencia del canary con afirmaciones incorrectas
+
+Verificado en `rollout.yaml`: los pasos reales son `20/50/80`, no `10%` como decía el diagrama. Y el `Service` principal (`sa-platform-api-gateway`, el de la IP pública) usa el mismo selector genérico que ambas versiones de pods comparten — sin un traffic router dedicado, Argo Rollouts aproxima el peso por cantidad de pods, así que **durante la ventana de análisis (antes del abort) sí puede haber tráfico real de usuarios hacia el canario**. El "0% de tráfico" del informe de incidente y del diagrama era una sobre-simplificación: lo único confirmado con la evidencia real es que, *tras* el aborto, quedó en `ActualWeight: 0`. Se corrigieron `diagrama-flujo.md` (pasos reales, orden correcto de firma-después-de-publicar, y una nota explícita sobre el mecanismo de tráfico) e `informe-incidente.md` (sección "Cómo se contuvo" reescrita con la precisión técnica correcta, sin retirar el resto de la evidencia real que sí es exacta: los timestamps, el mensaje de error, los 17.7s).
+
+### 5. Las 3 políticas de Kyverno aplicaban a todo el clúster
+
+Verificado en los 3 YAML: ningún `match.any[].resources` tenía `namespaces`. Fix: se agregó `namespaces: [sa-p5]` a las 3. Probado en un `kind` real: el mismo pod no conforme (`nginx:latest`) se rechaza dentro de `sa-p5` y se **permite** fuera (`default`) — confirmando que el alcance acotado funciona como se espera, sin bloquear por accidente componentes de plataforma (`argocd`, `kyverno`, `sealed-secrets`, `kube-system`). El job `kyverno-policy-check` de CI se actualizó para probar en `sa-p5` (crea el namespace antes de aplicar las políticas) y se agregó un caso nuevo que confirma explícitamente que fuera de `sa-p5` no se bloquea. También se aprovechó para acotar la identidad de Cosign en `verify-image-signatures`: de `refs/heads/*` a `refs/heads/main` — seguro porque el fix del hallazgo 1 ya garantiza que solo se promueve algo construido desde `main`. Aplicado también contra el clúster AKS real (`kubectl apply`, quedó `configured`, no `created` — las políticas ya existían de la Fase 9).
+
+### 6. Escalación de privilegios en Auth + sin validación de JWT en Catalog/Orders
+
+Confirmado en el código: `let rol = requestedRol === 'Admin' ? 'Admin' : 'Cliente';` en `auth-service/src/index.ts` — cualquiera podía registrarse como Admin mandando `"rol": "Admin"` en el body, sin ninguna verificación de que quien llamaba ya fuera administrador. Fix: el registro público siempre crea `Cliente`, sin excepción (no existe, ni se agregó, un flujo de alta de administradores por API — si hiciera falta uno, tendría que exigir que quien lo invoque ya esté autenticado como Admin). Verificado: `npm run build` compila limpio y los 4 tests existentes de `auth-service` (`security.test.ts`, `jwt.test.ts`) siguen pasando.
+
+Ni `catalog-service` ni `order-service` verificaban el JWT para nada — se agregó verificación real (no llamadas HTTP a `/validate`, sino decodificación local del mismo `JWT_SECRET` que ya usa `auth-service` para firmar, vía `PyJWT`, evitando una dependencia de red extra por cada mutación):
+
+- `catalog-service`: `create_product` exige rol `Admin` (gestión de catálogo). `update_product_stock` exige *cualquier* usuario autenticado, no específicamente Admin — es una operación interna que dispara `order-service` en nombre de un Cliente durante el checkout, no algo que un Cliente llame directo; exigirle Admin habría roto el flujo normal de compra.
+- `order-service`: `create_order` exige autenticación y toma `user_id` del JWT validado, ya no como argumento GraphQL que mandaba el cliente (antes se podía crear una orden a nombre de cualquier otro usuario con solo cambiar ese argumento). Reenvía el `Authorization` del comprador cuando llama a `updateProductStock` en catalog, porque esa mutación ahora exige un caller autenticado.
+- El `JWT_SECRET` se comparte vía el mismo Secret que ya usa `auth-service` (`{{ .Release.Name }}-auth-secrets`), inyectado como env var nueva en los `Deployment` de `catalog` y `orders`. Se confirmó además que `nginx.conf` del gateway no necesitaba ningún cambio: ninguna de sus 3 rutas (`/api/auth/`, `/api/catalog/`, `/api/orders/`) pisa el header `Authorization`, así que ya viaja transparente de punta a punta (comportamiento por defecto de `proxy_pass`, no hacía falta agregar `proxy_set_header Authorization` a mano).
+
+**Verificado con tests reales, no solo escrito:** se agregaron casos nuevos a las dos suites de Python (rechazo sin token, rechazo con rol incorrecto, y — de paso, junto con el hallazgo 7 — rechazo por stock insuficiente y por cantidad negativa) y se corrieron contra MongoDB/MySQL reales en Docker: **7/7 passed** en catalog, **5/5 passed** en orders. Se reconstruyeron las dos imágenes con `PyJWT` agregado y se re-escanearon con Trivy real: **0 CRITICAL** en ambas.
+
+### 7. Stock no atómico en Orders (race condition + cantidad negativa)
+
+Confirmado: `create_order` consultaba el stock en una llamada GraphQL separada de la que lo descontaba — dos compras concurrentes podían pasar ambas la validación leyendo el mismo stock. Y `update_product_stock` hacía `$inc: {stock: -quantity_to_discount}` sin validar signo, así que una cantidad negativa aumentaba el stock en vez de descontarlo. Fix, en `catalog-service` (que es quien tiene la base de datos, el lugar correcto para que la atomicidad sea real):
+
+```python
+result = products_collection.find_one_and_update(
+    {"_id": ObjectId(id), "stock": {"$gte": quantity_to_discount}},
+    {"$inc": {"stock": -quantity_to_discount}},
+    return_document=ReturnDocument.AFTER
+)
+```
+
+El stock mínimo pasa a ser parte del filtro del propio `find_one_and_update` (atómico a nivel de MongoDB), no un chequeo previo separado — de dos compras concurrentes, como mucho una gana la condición atómica; la otra recibe `None`. Se rechaza explícitamente `quantity_to_discount < 0` antes de llegar a Mongo. Del lado de `order-service`, se eliminó el chequeo de stock ahora redundante (`if product_data["stock"] < quantity`) y se reemplazó por depender del resultado real de `updateProductStock`: si devuelve `null`, la orden no se crea (antes, un fallo en ese paso podía dejar el stock ya descontado sin una orden que lo respalde — ahora es imposible, porque la orden se inserta *después* de confirmar que el descuento atómico tuvo éxito).
+
+**Por qué importa, en conjunto:** ninguno de estos 7 hallazgos había sido detectado por Trivy, por los tests que ya existían, ni por ninguna de las fases anteriores — hacía falta leer el código con otro criterio (seguridad, concurrencia, exactitud de la documentación) para encontrarlos. Confirma algo que ya se sabía en abstracto pero vale la pena decir en concreto: escanear vulnerabilidades conocidas (Trivy) y tener tests que pasan no es lo mismo que estar libre de bugs de lógica o de diseño de permisos — son capas complementarias, no sustitutas.

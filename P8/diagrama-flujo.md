@@ -8,12 +8,13 @@ flowchart TD
     B --> C["Build & Push: 7 imágenes"]
     C --> V1{{"✅ Trivy: ¿CRITICAL?"}}
     V1 -- "sí → bloquea" --> X1["❌ No se publica en GHCR<br/>(evidencia: PR #1)"]
-    V1 -- "no" --> C2["SBOM (CycloneDX) + firma keyless (Cosign)"]
+    V1 -- "no" --> C2["SBOM (CycloneDX)"]
     C2 --> D["Publicar en GHCR<br/>ghcr.io/elfbibv/*"]
+    D --> D2["Firma keyless (Cosign)<br/>sobre el digest ya publicado"]
 
-    D --> E1["Despliegue efímero en kind<br/>canary sano + fallo inducido"]
-    D --> E2["Kyverno: 3 políticas de admisión<br/>(kind propio)"]
-    D --> E3["Prueba de carga k6<br/>(kind propio)"]
+    D2 --> E1["Despliegue efímero en kind<br/>canary sano + fallo inducido"]
+    D2 --> E2["Kyverno: 3 políticas de admisión<br/>(kind propio)"]
+    D2 --> E3["Prueba de carga k6<br/>(kind propio)"]
 
     E1 --> V2{{"✅ ¿Las 3 validaciones en verde?"}}
     E2 --> V2
@@ -27,10 +28,10 @@ flowchart TD
         G --> H["Revisión humana del PR"]
         H --> I["Merge a main del repo GitOps"]
         I --> J["ArgoCD detecta el cambio<br/>y sincroniza (Synced/Healthy)"]
-        J --> K["Argo Rollouts: canary en AKS<br/>10% tráfico + AnalysisRun sobre /health"]
+        J --> K["Argo Rollouts: canary en AKS<br/>pasos 20% → 50% → 80%, AnalysisRun sobre /health en cada paso"]
         K --> V3{{"✅ ¿Análisis pasa?"}}
         V3 -- "sí" --> M["Promoción por pasos<br/>hasta 100% estable"]
-        V3 -- "no" --> N["🔄 Rollback automático<br/>canary a 0 réplicas, 0% tráfico afectado<br/>(ver informe-incidente.md: 17.7s)"]
+        V3 -- "no" --> N["🔄 Rollback automático<br/>canary escalado a 0 réplicas<br/>(exposición real acotada al peso del paso<br/>y a la ventana de análisis, ~18s;<br/>ver informe-incidente.md)"]
     end
 
     style V1 fill:#7f1d1d,color:#fff
@@ -52,4 +53,6 @@ flowchart TD
 
 ## Punto de reversión
 
-El único punto de reversión automática es el `AnalysisRun` del canary: si `/health` del candidato falla, Argo Rollouts aborta el Rollout y escala el canary a 0 réplicas sin intervención humana, dejando el 100% del tráfico en la versión estable anterior. Documentado con evidencia real (timestamps, mensajes de error reales) en [`informe-incidente.md`](informe-incidente.md).
+El único punto de reversión automática es el `AnalysisRun` del canary: si `/health` del candidato falla, Argo Rollouts aborta el Rollout y escala el canary a 0 réplicas sin intervención humana, dejando el 100% del tráfico (desde ese momento) en la versión estable anterior.
+
+**Precisión importante:** el `Service` que recibe tráfico real (`sa-platform-api-gateway`, el que tiene la IP pública) no usa un traffic router dedicado — selecciona pods de ambas versiones a la vez (mismo selector genérico, sin distinguir estable de canario), y Argo Rollouts aproxima el peso configurado ajustando cuántos pods de cada ReplicaSet hay corriendo. Eso significa que **durante la ventana de análisis de cada paso (antes del abort) sí puede llegar tráfico real de usuarios al canario**, proporcional al peso de ese paso (20% en el primer paso) — el rollback deja el tráfico en 0% hacia el canario recién *después* de abortar, no durante toda la promoción. El `AnalysisRun` en sí consulta al candidato por un `Service` interno aparte (`-canary`), separado del tráfico de usuarios. Documentado con evidencia real (timestamps, mensajes de error reales) en [`informe-incidente.md`](informe-incidente.md).

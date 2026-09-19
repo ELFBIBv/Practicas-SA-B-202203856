@@ -22,6 +22,9 @@ spec:
           - resources:
               kinds:
                 - Pod
+              # Acotada a sa-p5, mismo motivo que restrict-image-registries.
+              namespaces:
+                - sa-p5
       validate:
         message: >-
           El pod debe correr con runAsNonRoot: true (a nivel de pod o de

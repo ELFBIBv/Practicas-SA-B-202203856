@@ -382,11 +382,27 @@ jobs:
           retention-days: 30
 
       - name: Publicar en GHCR
+        id: push
         if: github.event_name != 'pull_request'
         run: |
+          first_tag=""
           while IFS= read -r tag; do
-            [ -n "$tag" ] && docker push "$tag"
+            if [ -n "$tag" ]; then
+              docker push "$tag"
+              [ -z "$first_tag" ] && first_tag="$tag"
+            fi
           done <<< "${{ steps.meta.outputs.tags }}"
+          # El digest que hay que firmar es el que quedó publicado de
+          # verdad, no steps.build.outputs.digest (ese es el digest del
+          # build LOCAL con --load, de antes de publicar, usado solo para
+          # que Trivy escanee antes de subir nada). BuildKit puede agregar
+          # provenance/attestations al pushear que cambian el digest del
+          # manifest respecto al build local — firmar el digest equivocado
+          # deja la imagen realmente publicada sin firma verificable
+          # (Kyverno la rechaza con "no signatures found" aunque el propio
+          # paso de firma haya reportado éxito).
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$first_tag" | sed 's/^.*@//')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Instalar Cosign
         if: github.event_name != 'pull_request'
@@ -402,7 +418,7 @@ jobs:
           COSIGN_YES: "true"
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}"
-          DIGEST="${{ steps.build.outputs.digest }}"
+          DIGEST="${{ steps.push.outputs.digest }}"
           cosign sign "$IMAGE@$DIGEST"
           cosign attach sbom --sbom sbom-${{ matrix.name }}.json "$IMAGE@$DIGEST"
           echo "Imagen firmada: $IMAGE@$DIGEST"
@@ -636,6 +652,11 @@ jobs:
 
       - name: Aplicar las 3 políticas de admisión
         run: |
+          # Las políticas están acotadas al namespace sa-p5 (no a todo el
+          # clúster, para no arriesgar bloquear componentes de plataforma
+          # como argocd/kyverno/sealed-secrets) — hay que probarlas ahí,
+          # no en "default".
+          kubectl create namespace sa-p5 --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f P8/kyverno/policies/
           kubectl wait --for=condition=Ready clusterpolicy --all --timeout=60s
           kubectl get clusterpolicy
@@ -643,7 +664,7 @@ jobs:
       - name: "Caso rechazado 1: imagen externa, root, sin firmar (debe bloquearse)"
         run: |
           set +e
-          OUTPUT=$(kubectl run policy-check-external-image --image=nginx:latest --restart=Never 2>&1)
+          OUTPUT=$(kubectl run policy-check-external-image -n sa-p5 --image=nginx:latest --restart=Never 2>&1)
           STATUS=$?
           echo "$OUTPUT"
           set -e
@@ -655,10 +676,18 @@ jobs:
           echo "$OUTPUT" | grep -q "require-non-root-user" || { echo "ERROR: no se activó require-non-root-user."; exit 1; }
           echo "OK: Kyverno rechazó correctamente el despliegue no conforme."
 
+      # Confirma también que la política NO aplica fuera de sa-p5 (alcance
+      # acotado a propósito, ver Fase 12 de CAMBIOS-GITOPS.md).
+      - name: "Caso permitido: mismo pod no conforme, pero fuera de sa-p5 (no debe bloquearse)"
+        run: |
+          kubectl run policy-check-outside-scope -n default --image=nginx:latest --restart=Never
+          kubectl delete pod policy-check-outside-scope -n default --ignore-not-found
+          echo "OK: fuera de sa-p5 el mismo pod no conforme no fue bloqueado (alcance acotado funcionando)."
+
       - name: "Caso rechazado 2: imagen propia sin firma verificable (debe bloquearse)"
         run: |
           set +e
-          OUTPUT=$(kubectl run policy-check-unsigned --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-notification-service:${GITHUB_SHA:0:7}" --restart=Never 2>&1)
+          OUTPUT=$(kubectl run policy-check-unsigned -n sa-p5 --image="${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sa-notification-service:${GITHUB_SHA:0:7}" --restart=Never 2>&1)
           STATUS=$?
           echo "$OUTPUT"
           set -e
@@ -851,8 +880,21 @@ jobs:
   # ---------------------------------------------------------------------
   promote-to-gitops:
     name: "Proponer despliegue (PR al repo GitOps)"
-    needs: build-and-push
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true'
+    # Las 4 validaciones tienen que pasar antes de proponer nada al repo
+    # GitOps — sin esto, build-and-push solo (sin esperar a deploy-kind,
+    # kyverno-policy-check ni load-test, que corren en paralelo) podía
+    # abrir el PR aunque alguna de esas tres terminara fallando después.
+    # Si alguna falla, GitHub Actions salta este job automáticamente (no
+    # hace falta un "always()": ese es el comportamiento por defecto de
+    # "needs" cuando cualquiera de sus jobs no tiene éxito).
+    needs: [build-and-push, deploy-kind, kyverno-policy-check, load-test]
+    # workflow_dispatch se puede lanzar desde cualquier rama; sin este
+    # chequeo, correrlo desde una rama que no sea main podía promover un
+    # estado que nunca pasó por el flujo de PR normal del repo de código.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy == 'true' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       GITOPS_REPO: ELFBIBv/Practicas-SA-B-202203856-gitops
@@ -862,6 +904,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: source
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.0
+
+      # Gate explícito que pide el enunciado ("validación mediante helm
+      # lint dentro del pipeline"): antes de proponer nada, el chart que
+      # de verdad va a llegar a producción (values-azure.yaml) tiene que
+      # lintear limpio.
+      - name: helm dependency update + lint --strict (values-azure.yaml)
+        run: |
+          helm dependency update source/P8/charts/sa-platform
+          helm lint --strict source/P8/charts/sa-platform \
+            --values source/P8/charts/sa-platform/values.yaml \
+            --values source/P8/charts/sa-platform/values-azure.yaml
 
       - name: Clonar el repositorio GitOps
         run: |

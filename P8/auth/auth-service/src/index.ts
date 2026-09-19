@@ -21,21 +21,28 @@ app.use(cookieParser());
 
 app.post('/register', async (req, res) => {
     try {
-        const { carnet, nombres, apellidos, correo, password, rol: requestedRol } = req.body;
+        const { carnet, nombres, apellidos, correo, password } = req.body;
         if (!carnet || !nombres || !apellidos || !correo || !password) {
             res.status(400).json({ message: "All fields are required" });
             return;
         }
-        
+
         const nombresEncrypted = encryptAES(nombres);
         const apellidosEncrypted = encryptAES(apellidos);
         const correoEncrypted = encryptAES(correo);
-        
+
         // Flag to toggle between AES and Bcrypt for passwords
         const useAES = process.env.USE_AES_FOR_PASSWORD === 'true';
         const passwordHash = useAES ? encryptAES(password) : await hashPassword(password);
-        
-        let rol = requestedRol === 'Admin' ? 'Admin' : 'Cliente';
+
+        // El registro público SIEMPRE crea Cliente. Antes el body podía
+        // mandar "rol": "Admin" y el endpoint lo aceptaba sin ninguna
+        // verificación de que quien llamaba ya fuera administrador —
+        // cualquiera podía autoasignarse Admin al registrarse. No existe
+        // (todavía) un flujo de alta de administradores por API; si hace
+        // falta uno, debe exigir que quien lo invoque ya esté autenticado
+        // como Admin, nunca aceptar el rol desde el propio registro público.
+        const rol = 'Cliente';
         
         const query = `
             INSERT INTO users (carnet, nombres_encrypted, apellidos_encrypted, correo_encrypted, password_hash, rol)
