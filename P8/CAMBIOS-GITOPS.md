@@ -625,7 +625,7 @@ Los dos Jobs de prueba se eliminaron después de guardar su salida. Los `SealedS
 ### 4. Otros dos efectos encontrados durante la recuperación
 
 - Las políticas de registry y non-root bloqueaban la recreación de NATS, MySQL y MongoDB porque son imágenes de terceros dentro de `sa-p5`. Se desactivó su autogen y se excluyeron únicamente los nombres exactos `sa-platform-{nats,mysql,mongodb}-0`. La primera versión usaba selectores de etiquetas, pero se endureció porque un Pod malicioso podía falsificar `app=mysql`; un dry-run confirmó que esa evasión ahora vuelve a ser rechazada, mientras los tres Pods reales siguen admitidos.
-- La cuota de `limits.cpu: 3` deja poco margen para el `maxSurge` de los Deployments. Durante los reinicios aparecieron rechazos transitorios de cuota, pero Kubernetes reintentó y los tres rollouts terminaron. No fue la causa del error original de Argo, pero debe considerarse si se aumentan réplicas o límites.
+- La cuota original de `limits.cpu: 3` no dejaba margen suficiente para el `maxSurge` y llegó a bloquear nuevas réplicas con `2950m` ya utilizados. Se ajustó a `3150m`: admite el mayor Pod adicional (`200m`) y conserva el orden entre la cuota de aplicación y el techo Terraform de `3200m`.
 
 ### Estado al cerrar esta fase
 
