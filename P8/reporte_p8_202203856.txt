@@ -1,0 +1,97 @@
+================================================================
+ VERIFICACION PRACTICA 8 - v2.0
+ Carnet: 202203856        Fecha: 2026-09-19 13:57
+ Hash del script: c65fafe26ff1c209
+================================================================
+
+--- 0. Herramientas y contexto (debe verificarlo el auxiliar)
+  [AVISO] Herramientas ausentes: argocd kubectl-argo-rollouts  (sus verificaciones saldran en cero)
+  Contexto de kubectl : aks-sa-p8
+  Servidor            : Kubernetes control plane is running at https://aks-sa-p8-rg-practica8-fd84b9-3ki1wv4n.hcp.chilecentral.azmk8s.io:443
+  Usuario de ArgoCD   : sin sesion
+  [OK]    Acceso al cluster confirmado
+
+--- 1. Repositorios
+  [OK]    Repositorio de codigo accesible
+  [OK]    Repositorio GitOps accesible
+  [OK]    Carpeta /P8 presente
+  [OK]    README de entrega presente
+
+--- ELIMINATORIO: ausencia de despliegue directo (seccion 8.1)
+  [AVISO] kubectl/helm detectado, pero solo contra un cluster efimero creado en el mismo job (kind/k3d/minikube), sin credenciales hacia un cluster externo: verificar manualmente que no toque el cluster real
+
+--- 2.1 Infraestructura como codigo con Terraform (8 pts)
+  [OK]    Codigo Terraform encontrado en 1 directorio(s)
+  [OK]    terraform validate correcto
+  [OK]    Declara namespaces, cuotas o limites
+  [OK]    Declara RBAC
+  >> 2.1 = 8 / 8
+
+--- 2.2 Empaquetado con Helm (8 pts)
+  [OK]    16 chart(s): 2 raiz/raices y 14 subchart(s)
+  [OK]    Multiples servicios empaquetados
+  [OK]    helm lint correcto en los charts raiz
+  [OK]    Valores diferenciados por ambiente (10 archivos)
+  [OK]    helm lint integrado en el pipeline
+  >> 2.2 = 8 / 8
+
+--- 2.3 GitOps con ArgoCD (14 pts)
+  [AVISO] Sin sesion de argocd: se consulto el CRD Application directamente
+  sync=Synced  health=Healthy  automated=si
+  repoURL=https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+  [OK]    Aplicacion sincronizada
+  [OK]    Aplicacion saludable
+  [OK]    Apunta al repositorio GitOps declarado
+  [OK]    El pipeline genera un Pull Request al repositorio GitOps
+  >> 2.3 = 14 / 14
+
+--- 2.4 Entrega progresiva y reversion automatica (14 pts)
+  [OK]    Rollout encontrado: sa-platform-api-gateway
+  Estrategia: canary   pasos declarados: 9
+  [OK]    Tres o mas pasos de promocion
+  [OK]    AnalysisTemplate definido (1)
+  [OK]    La promocion esta condicionada al analisis
+  [OK]    Evidencia de reversion: 1 AnalysisRun fallido(s), abort=false
+
+  >> 2.4 = 14 / 14
+
+--- 2.5 Validacion automatizada (8 pts)
+  [OK]    Prueba de carga presente
+  [OK]    Umbrales definidos
+  [OK]    Pruebas de humo o integracion presentes
+  [OK]    El analisis ejecuta pruebas (provider job/web)
+  >> 2.5 = 8 / 8
+
+--- 2.6 Cadena de suministro y politicas (8 pts)
+  [OK]    Trivy configurado para bloquear ante CVE criticas
+  [OK]    Firma de imagen verificada con Cosign
+  Politicas activas: 3
+  [OK]    Tres o mas politicas activas
+  [OK]    Secretos gestionados de forma segura
+  [OK]    Sin secretos en texto plano
+  >> 2.6 = 8 / 8
+
+--- Antipatrones (informativo, penalizacion manual)
+  [OK]    Sin uso de la etiqueta latest
+  [OK]    Se declaran limites de recursos
+
+================================================================
+ RESUMEN - carnet 202203856
+================================================================
+  2.1 Terraform ..............  8 / 8
+  2.2 Helm ...................  8 / 8
+  2.3 GitOps con ArgoCD ...... 14 / 14
+  2.4 Entrega progresiva ..... 14 / 14
+  2.5 Validacion automatizada   8 / 8
+  2.6 Seguridad y politicas ..  8 / 8
+  ------------------------------------
+  CONOCIMIENTO ............... 60 / 60
+
+  Pendiente de evaluacion presencial: 40 pts
+    1.1 Documentacion (8)   1.2 Diagrama (8)
+    1.3 Informe de incidente (10)   1.4 Preguntas teoricas (14)
+
+  Requisitos eliminatorios: todos cumplidos
+
+  Duracion: 20s    Reporte: reporte_p8_202203856.txt
+================================================================

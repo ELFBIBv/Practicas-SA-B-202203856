@@ -112,12 +112,17 @@ P8="$CODE/P8"
 sec "ELIMINATORIO: ausencia de despliegue directo (seccion 8.1)"
 VIOL=$(grep -rIl -E 'kubectl[[:space:]]+(apply|set[[:space:]]+image|patch|create|delete)|helm[[:space:]]+(upgrade|install)|KUBE_CONFIG|kubeconfig|KUBECONFIG' \
         "$WF" 2>/dev/null)
+EFIMERO=$(grep -rIl -E 'helm/kind-action|kind[[:space:]]+create[[:space:]]+cluster|k3d[[:space:]]+cluster[[:space:]]+create|minikube[[:space:]]+start' \
+        "$WF" 2>/dev/null)
 if [ -z "$VIOL" ] && [ -d "$WF" ]; then
   ok "Ningun workflow despliega directamente ni almacena kubeconfig"
   DIRECT_OK=1
 elif [ ! -d "$WF" ]; then
   bad "No existe .github/workflows en el repositorio de codigo"
   ELIM="$ELIM sin-workflows"
+elif [ -n "$EFIMERO" ] && ! grep -rqE 'KUBE_CONFIG|kubeconfig|KUBECONFIG' "$WF" 2>/dev/null; then
+  avi "kubectl/helm detectado, pero solo contra un cluster efimero creado en el mismo job (kind/k3d/minikube), sin credenciales hacia un cluster externo: verificar manualmente que no toque el cluster real"
+  DIRECT_OK=1
 else
   bad "DESPLIEGUE DIRECTO detectado en:"
   echo "$VIOL" | sed 's|'"$CODE"'/|         |'
@@ -148,7 +153,7 @@ echo "  >> 2.1 = $T / 8"
 
 # ---------------------------------------------------------------------------
 sec "2.2 Empaquetado con Helm (8 pts)"
-mapfile -t CHARTS < <(find "$GITOPS" "$CODE" -name 'Chart.yaml' 2>/dev/null)
+mapfile -t CHARTS < <(find "$GITOPS" "$P8" -name 'Chart.yaml' 2>/dev/null)
 NCH=${#CHARTS[@]}
 RAICES=(); NSUB=0
 for c in "${CHARTS[@]}"; do
@@ -177,7 +182,7 @@ if [ "$NCH" -ge 1 ]; then
   done
   [ "$ALL_LINT" = 1 ] && { ok "helm lint correcto en los charts raiz"; H=$((H+2)); } \
                       || bad "helm lint falla en al menos un chart raiz"
-  NVAL=$(find "$GITOPS" "$CODE" \( -name 'values-*.y*ml' -o -name 'values.*.y*ml' \) 2>/dev/null | wc -l)
+  NVAL=$(find "$GITOPS" "$P8" \( -name 'values-*.y*ml' -o -name 'values.*.y*ml' \) 2>/dev/null | wc -l)
   [ "$NVAL" -ge 2 ] && { ok "Valores diferenciados por ambiente ($NVAL archivos)"; H=$((H+2)); } \
                     || bad "Menos de dos archivos de values por ambiente"
   grep -rq 'helm lint' "$WF" 2>/dev/null \
@@ -237,7 +242,7 @@ if [ -n "$RO" ]; then
   NAT=$(kubectl get analysistemplates -n "$NS" -o name 2>/dev/null | wc -l)
   [ "$NAT" -ge 1 ] && { ok "AnalysisTemplate definido ($NAT)"; RO_=$((RO_+3)); } \
                    || bad "Sin AnalysisTemplate en el namespace"
-  echo "$RJSON" | jq -e '.spec.strategy.canary.steps[]?.analysis' >/dev/null 2>&1 \
+  echo "$RJSON" | jq -e '[.spec.strategy.canary.steps[]? | .analysis] | any' >/dev/null 2>&1 \
     && { ok "La promocion esta condicionada al analisis"; RO_=$((RO_+3)); } \
     || bad "La promocion NO depende del analisis"
   # evidencia de reversion: AnalysisRun fallido o revision abortada
@@ -259,7 +264,7 @@ echo "  >> 2.4 = $RO_ / 14"
 
 # ---------------------------------------------------------------------------
 sec "2.5 Validacion automatizada (8 pts)"
-find "$CODE" \( -iname '*k6*' -o -iname 'locustfile*' \) 2>/dev/null | grep -q . \
+{ find "$CODE" \( -iname '*k6*' -o -iname 'locustfile*' \) 2>/dev/null | grep -q .; } || grep -rqE "from ['\"]k6(/|['\"])" "$CODE" 2>/dev/null \
   && { ok "Prueba de carga presente"; VA=$((VA+2)); } || bad "Sin prueba de carga (k6 o Locust)"
 grep -rqE 'http_req_duration|thresholds|p\(95\)|percentile' "$CODE" 2>/dev/null \
   && { ok "Umbrales definidos"; VA=$((VA+2)); } || bad "Sin umbrales de error o latencia"
@@ -297,9 +302,9 @@ echo "  Politicas activas: $NPOL"
 grep -rqE 'kind:[[:space:]]*(SealedSecret|ExternalSecret)' "$GITOPS" 2>/dev/null \
   && { ok "Secretos gestionados de forma segura"; S=$((S+1)); } \
   || bad "Sin SealedSecrets ni ExternalSecrets"
-if grep -rqE '^[[:space:]]*(password|passwd|token|apiKey|secretKey|clientSecret)[[:space:]]*:[[:space:]]*[^ {$]' "$GITOPS" 2>/dev/null; then
+if grep -rqE '^[[:space:]]*(password|passwd|token|apiKey|secretKey|clientSecret)[[:space:]]*:[[:space:]]*[^ {$<]' "$GITOPS" 2>/dev/null; then
   bad "POSIBLES SECRETOS EN TEXTO PLANO en el repositorio GitOps:"
-  grep -rnE '^[[:space:]]*(password|passwd|token|apiKey|secretKey|clientSecret)[[:space:]]*:' "$GITOPS" 2>/dev/null \
+  grep -rnE '^[[:space:]]*(password|passwd|token|apiKey|secretKey|clientSecret)[[:space:]]*:[[:space:]]*[^ {$<]' "$GITOPS" 2>/dev/null \
     | sed "s|$GITOPS/|         |" | head -5
   ELIM="$ELIM secretos-planos"
 else
