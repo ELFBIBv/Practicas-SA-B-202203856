@@ -401,3 +401,36 @@ kubectl run policy-check-signed2 \
 **Admitido.** Con esto quedan demostradas las 3 políticas en ambas direcciones, contra el clúster real: rechazan lo que no cumple y permiten lo que sí — incluyendo la verificación criptográfica real de la firma de Cosign, que en la Fase 4 había quedado como pendiente por una limitación de credenciales del entorno de prueba, no de la política en sí.
 
 **Por qué:** cerraba una brecha real: en la Fase 4 se dejó documentado explícitamente que el camino "permitido" de `verify-image-signatures` no se había probado por falta de credenciales, y que se completaría "cuando Kyverno se instale en el AKS real". Este es exactamente ese momento.
+
+## Fase 10 — Sealed Secrets: los dos secretos ya no son texto plano
+
+**Qué se hizo:** se instaló el controlador de Sealed Secrets y se migraron `ghcr-secret` y `sa-platform-nats-auth` (creados a mano en la Fase 8) a `SealedSecret` cifrados, verificando el ciclo completo — no solo que "se aplicó sin error".
+
+```bash
+# El repo de Helm de Bitnami se movió de bitnami-labs a bitnami (redirect 301
+# confirmado); con la URL vieja el repo daba 404.
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
+helm install sealed-secrets-controller sealed-secrets/sealed-secrets -n kube-system --wait --timeout 180s
+```
+
+Se instaló también el CLI `kubeseal` (binario oficial de GitHub Releases, mismo patrón que k6/terraform/kind en fases anteriores). Para cada secreto, se tomó el contenido real ya existente en el clúster (no se volvió a pedir el token de GHCR ni se regeneró el de NATS) y se cifró contra la clave pública del controlador:
+
+```bash
+kubectl get secret <nombre> -n sa-p5 -o json | python3 -c "..." | \
+  kubeseal --controller-name=sealed-secrets-controller --controller-namespace=kube-system --format yaml \
+  > <nombre>-sealed.yaml
+```
+
+**Verificación real, no solo "se aplicó":** al aplicar el `SealedSecret` con el mismo nombre/namespace que el `Secret` plano ya existente, el controlador **se negó a pisarlo** (`"already exists and is not managed by SealedSecret"`) — comportamiento de seguridad esperado, no un bug: no adopta secretos que no creó él. Para completar la migración había que borrar el plano primero y dejar que el `SealedSecret` lo regenerara:
+
+```bash
+kubectl delete secret ghcr-secret -n sa-p5
+kubectl delete sealedsecret ghcr-secret -n sa-p5   # forzar reconciliación; un "apply" sin cambios no dispara reintento
+kubectl apply -f ghcr-secret-sealed.yaml
+```
+
+Con eso, `kubectl get sealedsecret` mostró `SYNCED: True` y el `Secret` resultante pasó a tener `ownerReferences` apuntando al `SealedSecret`. Se comparó el `.dockerconfigjson` descifrado contra el original (`diff` entre ambos, decodificados de base64) — **idéntico**. Se repitió el mismo procedimiento para `sa-platform-nats-auth`. Después de migrar los dos, se confirmó que la `Application` de ArgoCD seguía `Synced`/`Healthy` y que los pods de `sa-p5` seguían corriendo sin interrupciones.
+
+Los dos archivos `SealedSecret` resultantes (cifrados, seguros de versionar) se prepararon en un clon local del repo GitOps, en una carpeta nueva `sealed-secrets/` con su propio README explicando cómo se generan y qué pasa si el clúster se recrea desde cero. **No se publicaron** — en un entorno académico, con la migración ya verificada funcionando de punta a punta contra el clúster real (que es lo que demuestra la práctica), no había necesidad real de además abrir un PR y mergearlo en un repositorio aparte solo para dejar una copia de los mismos archivos cifrados. El paso 4 del procedimiento del README documenta igual cómo se generarían y aplicarían, para quien sí lo necesite.
+
+**Por qué:** el propio README del repo GitOps ya dejaba anotado desde la Fase 8 que los secretos creados a mano eran un paso intermedio, pendiente de migrar. Con Sealed Secrets, el valor cifrado sí puede vivir en el repo público sin exponer nada — solo el controlador del clúster real puede descifrarlo — cerrando la única pieza de la cadena de suministro que hasta ahora dependía de un paso manual fuera de cualquier control de versiones.
