@@ -147,3 +147,290 @@ Al subir el fix de la Fase 3.2, el job "Test: order-service" empezó a fallar en
 **Verificado, no solo escrito:** se levantó un MySQL real en Docker (mismo esquema que usa CI, `orders-db/init.sql`), se instaló el `requirements.txt` completo con `httpx==0.27.2` en un venv limpio, y se corrieron los 3 tests de `tests/test_main.py` de punta a punta: **3 passed**. Se reconstruyó además la imagen de Docker completa y se volvió a escanear con Trivy real: sigue en **0 CRITICAL** (confirmado parseando el JSON).
 
 **Lección para las próximas veces:** al subir una dependencia solo para resolver una CVE, conviene subir al **mínimo** que resuelve el problema, no al último release disponible — saltos más grandes traen más riesgo de romper compatibilidad con el resto del código (en este caso, con una versión vieja de Starlette que ningún commit de esta fase tocó). Y, sobre todo: verificar corriendo los tests reales, no solo instalando las dependencias — el venv sin tests habría dejado pasar este error igual.
+
+## Fase 4 — Kyverno: 3 políticas de admisión
+
+**Qué se hizo:**
+
+Se agregó [`P8/kyverno/policies/`](kyverno/policies/) con 3 `ClusterPolicy`:
+
+1. **`restrict-image-registries`**: solo permite imágenes de `ghcr.io/elfbibv/*`. Rechaza cualquier cosa de Docker Hub, de otro registry o de otro owner de GHCR.
+2. **`require-non-root-user`**: exige `runAsNonRoot: true` (a nivel de pod o de contenedor). Formaliza como regla del clúster algo que todos los Dockerfile del proyecto ya hacían por convención (`USER 10001`).
+3. **`verify-image-signatures`**: usa la función `verifyImages` de Kyverno para exigir que la imagen esté firmada con Cosign en modo keyless por el propio workflow de CI (mismo mecanismo de la Fase 3), verificando contra el log público de Sigstore (Rekor). Es la política que más directamente conecta con lo que ya existía: sin esto, firmar las imágenes en el pipeline sería un ejercicio sin consecuencias — con esto, el clúster efectivamente exige esa firma antes de correr nada.
+
+En `ci-cd.yml` se agregó el job `kyverno-policy-check` (corre en paralelo a `deploy-kind`, en su propio clúster kind independiente para no arriesgar ese job ya probado). Instala Kyverno vía Helm, aplica las 3 políticas, e intenta desplegar dos pods deliberadamente no conformes:
+- `nginx:latest` (Docker Hub, corre como root) → debe rechazarlo `restrict-image-registries` + `require-non-root-user`.
+- Una imagen propia (`ghcr.io/elfbibv/...`) pero sin `runAsNonRoot` y sin que Kyverno pueda verificar su firma en ese clúster efímero → debe rechazarla `require-non-root-user` y/o `verify-image-signatures`.
+
+El job falla explícitamente (`exit 1`) si alguno de los dos pods **no** es rechazado — no es un test cosmético, si las políticas dejaran de funcionar el job se pone rojo.
+
+**Validado en vivo, no solo escrito:** se instaló Kyverno de verdad en un clúster `kind` local (mismo mecanismo que usará CI) y se probaron las 3 políticas a mano:
+- `kubectl run ... --image=nginx:latest` → rechazado en el acto por `restrict-image-registries` **y** `require-non-root-user` simultáneamente (mensaje de error real capturado, ver conversación).
+- Se confirmó que `verify-image-signatures` **sí se activa** y evalúa imágenes de `ghcr.io/elfbibv/*`: al intentar verificar una imagen real y firmada (`sa-notification-service:9d19481`, ya publicada por el PR #1), Kyverno la rechazó porque no pudo autenticarse contra GHCR para leer la firma — comportamiento correcto y seguro por defecto (falla cerrado, no abierto). Se intentó además cablear credenciales de registry a Kyverno (`admissionController.extraArgs: --imagePullSecrets=regcred`) para probar el camino "permitido" completo, pero no se pudo cerrar el ciclo end-to-end porque el token usado tampoco tenía scope `read:packages` real — limitación del entorno de prueba, no de la política.
+
+**Qué queda pendiente:** el camino "permitido" de `verify-image-signatures` (una imagen firmada que Kyverno logra verificar con éxito) todavía no se demostró de punta a punta. Se va a validar naturalmente cuando Kyverno se instale en el AKS real (Fase futura), donde sí va a existir un `imagePullSecret` con credenciales de lectura reales sobre GHCR (el mismo `ghcr-secret` que ya usa el chart de Helm). Mientras tanto, lo que sí quedó demostrado — y es el requisito eliminatorio real — es que las 3 políticas están activas y bloquean correctamente lo que no cumple.
+
+**Por qué:**
+
+El enunciado pide 3 políticas de admisión con "evidencia de un despliegue rechazado". Elegí estas 3 específicamente porque cada una cierra un círculo con algo que ya existía en fases anteriores: la restricción de registry y la verificación de firma le dan sentido real al escaneo de Trivy y a la firma de Cosign de la Fase 3 (de nada sirve escanear y firmar en el pipeline si el clúster no exige después que lo que llegue haya pasado por ese pipeline), y el requisito de usuario no-root formaliza una convención que ya estaba en el código pero que hasta ahora nadie forzaba.
+
+**Nada de esto necesitó Azure** — se escribió y se probó íntegramente con un `kind` local. El job de CI tampoco lo necesita.
+
+## Fase 5 — Prueba de carga con k6
+
+**Qué se hizo:**
+
+Se agregó [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js): una prueba de carga contra el API Gateway con un perfil de 3 etapas (calentamiento 5→carga sostenida 20 VUs→enfriamiento), que ejercita `GET /health`, `POST /api/catalog/graphql` (`{ products { ... } }`) y `POST /api/orders/graphql` (`{ orders { ... } }`) — las mismas rutas que ya expone `nginx.conf` del gateway real. Umbrales: menos de 1% de requests fallidos y p95 de latencia bajo 500ms.
+
+En `ci-cd.yml` se agregó el job `load-test`: despliega un baseline propio en su propio clúster `kind` (independiente de `deploy-kind`, mismo motivo de aislamiento que Kyverno), expone el gateway con `kubectl port-forward`, y corre k6 contra él. El reporte (`--summary-export`) se sube como artifact.
+
+**Validado en vivo contra el stack real, no contra un mock — y encontré 3 problemas reales en el camino:**
+
+1. **El primer intento del propio script tenía un bug de verificación:** los `check()` solo miraban el status HTTP (`r.status === 200`). GraphQL devuelve **200 incluso cuando el resolver falla** (el error queda en el campo `errors` del body). Se comprobó a mano: con MySQL todavía no listo, `orders/graphql` devolvía `{"data": null, "errors": [...]}"` con status 200, y el check original lo daba por bueno igual. Fix: se agregó `!JSON.parse(r.body).errors` a cada check, y se probó explícitamente en ambas direcciones (con un body de error y uno sano) para confirmar que ahora sí distingue los dos casos.
+2. **Los `check()` fallidos, por sí solos, no hacen fallar a k6** — solo quedan reportados, a menos que haya un threshold sobre la métrica `checks`. Se agregó `checks: ['rate>0.99']` a `thresholds`; sin este agregado, el bug del punto 1 hubiera sido invisible incluso después de corregir los checks.
+3. **El job de CI tenía el mismo hueco que casi todos los anteriores: faltaba esperar a que los StatefulSets (MySQL/MongoDB/NATS) estuvieran listos antes de medir**, algo que `deploy-kind` sí hace. Comprobado desplegando el chart real en un `kind` local con las 7 imágenes reconstruidas: sin ese wait, la primera consulta a MySQL tardaba tanto en conectar que el p95 de la corrida llegó a **30 segundos** (vs. el umbral de 500ms), y `orders/graphql` literalmente no podía conectarse a la base. Con el wait agregado, mismo clúster, misma carga: p95 bajó a **15ms**, 500/500 checks en verde. Se agregó el loop de `kubectl rollout status statefulset/...` que le faltaba al job.
+
+**Por qué:**
+
+El enunciado pide "Pruebas automatizadas: scripts de humo, integración y carga, con sus reportes de ejecución" y, en la tabla de enlaces obligatoria, la ruta del archivo del reporte dentro del repositorio. La ruta del script queda documentada acá; el reporte de cada corrida (que cambia cada vez) se sube como artifact del run de CI, igual que se hizo con los reportes de Trivy y el SBOM en la Fase 3 — no tiene sentido versionar un archivo que se regenera en cada ejecución.
+
+**Nada de esto necesitó Azure** — se escribió y se probó íntegramente contra un `kind` local con el chart real desplegado. El job de CI tampoco lo necesita.
+
+**Dos errores reales que aparecieron recién en la primera corrida en GitHub Actions** (no los agarró la prueba local, porque al verificar a mano se corrieron los comandos adaptados en la propia terminal en vez del YAML tal cual, y eso tapó los dos huecos sin querer):
+
+1. `Error: unknown flag: --server-side` — el job `load-test` usa `--server-side=false` en el `helm upgrade --install` (una flag de Helm 4), pero nunca instalaba esa versión como sí hace `deploy-kind`; corría con el Helm 3.x por defecto del runner, que no la reconoce. Fix: agregar el paso `azure/setup-helm@v4` fijando `v4.3.0`, igual que `deploy-kind`.
+2. `no matches for kind "Rollout"/"AnalysisTemplate" in version "argoproj.io/v1alpha1"` — el chart de `sa-platform` define recursos de Argo Rollouts, y `load-test` nunca instalaba esos CRDs antes de desplegar. Fix: agregar el mismo paso "Instalar el controlador de Argo Rollouts" que ya tenía `deploy-kind` (sin el plugin `kubectl-argo-rollouts`, que no hace falta acá porque `load-test` no corre canary).
+
+Se comparó el resto de los pasos de `load-test` contra `deploy-kind` uno por uno para confirmar que no quedara un tercer hueco del mismo tipo. Con ambos fixes, la corrida [35374724033](https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033) terminó completa, con los 3 jobs nuevos (`kyverno-policy-check`, `load-test`, `deploy-kind`) en verde.
+
+## Fase 6 — Informe de incidente y diagrama del flujo
+
+**Qué se hizo:** se agregaron [`P8/informe-incidente.md`](informe-incidente.md) y [`P8/diagrama-flujo.md`](diagrama-flujo.md), los dos entregables del enunciado que no dependen de tener un AKS real levantado.
+
+El informe de incidente usa los 5 campos exactos que pide la sección 4.2 del enunciado (qué falló, cómo se detectó, cómo se contuvo, tiempo de recuperación, cómo prevenirlo), con datos tomados directamente de los logs reales de la corrida 35374724033 — no inventados: el mensaje de error real de Argo Rollouts (`received non 2xx response code: 500`), los timestamps exactos del fallo inducido y de la contención (17.7 segundos calculados restando los dos timestamps reales), y el estado real de los `ReplicaSet`/`AnalysisRun` (`SetWeight: 0`, `ActualWeight: 0`, confirmando 0% de tráfico real expuesto).
+
+El diagrama es Mermaid embebido en Markdown (GitHub lo renderiza nativo, sin depender de ninguna herramienta externa ni de generar una imagen aparte). Se validó que el diagrama efectivamente renderiza sin errores de sintaxis instalando `@mermaid-js/mermaid-cli` y su Chrome headless localmente, generando un SVG real a partir del mismo bloque `mermaid` del archivo, y revisando que la estructura del SVG resultante (todos los nodos, las 3 ramas de validación en rojo, el nodo de rollback) coincidiera con lo esperado — no se asumió que iba a renderizar bien solo por tener sintaxis "razonable".
+
+De paso se completaron con evidencia real 4 filas más de la tabla de enlaces obligatoria del README (ejecución exitosa, reversión automática, despliegue rechazado por política, imagen firmada), todas apuntando a la misma corrida 35374724033 — dejando explícito en cada una que esa evidencia es del `kind` efímero del pipeline, no de AKS todavía, para no sobrerrepresentar lo que falta.
+
+**Por qué:** el enunciado exige exactamente 5 campos en el informe de incidente (ni más ni menos) y un diagrama "desde el commit hasta el clúster, con puntos de validación y de reversión" — ambos se pueden construir con evidencia que ya existe del pipeline, sin necesitar Azure para nada. Se dejó explícito en el diagrama que el repo de código nunca cruza hacia el clúster: todo lo que hace es proponer un PR en el repo GitOps, y quien aplica el cambio es ArgoCD — es el mismo principio de separación que ya se documentó en README-gitops.md del repo GitOps.
+
+**Nada de esto necesitó Azure.**
+
+## Fase 7 — Clúster AKS real y Terraform aplicado
+
+**Qué se hizo:** se levantó el clúster de verdad, con permiso explícito del usuario y confirmando primero la cuota disponible (`az vm list-usage`) y qué suscripción quedaba activa (`az account set --subscription "Azure for Students"`, verificado con `az account list` que la otra suscripción vinculada a la cuenta — de pago — no era la default, para no gastar de ahí por error):
+
+```bash
+az group create --name rg-practica8 --location chilecentral
+az aks create --resource-group rg-practica8 --name aks-sa-p8 \
+  --location chilecentral --tier free --node-count 2 --node-vm-size Standard_DS2_v2 \
+  --network-plugin azure --network-plugin-mode overlay --network-dataplane cilium \
+  --generate-ssh-keys
+```
+
+Clúster con 2 nodos `Ready` en `chilecentral`. Luego se corrió el Terraform de `P8/terraform/` (namespace, cuotas, límites, RBAC) contra ese clúster real: `terraform init` → `terraform plan -out=tfplan` (revisado antes de aplicar: 9 recursos a crear, 0 a destruir) → `terraform apply tfplan`. Los 9 recursos se crearon sin error, y se verificaron con `kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5` contra el clúster real — evidencia guardada en `terraform/plan.log`, `terraform/apply.log` y `terraform/kubectl-get-evidencia.log`.
+
+**Un detalle operativo que vale la pena dejar anotado:** al correr `az aks get-credentials`, el `~/.kube/config` local estaba corrupto (28 bytes, sin las claves `clusters`/`contexts`) — resto de haber borrado varios clústeres `kind` efímeros durante las pruebas locales de las Fases 4-6. Se respaldó (`mv` a `.bak`, no se borró) antes de dejar que `az aks get-credentials` generara uno nuevo.
+
+**Por qué:** era el paso bloqueante para todo lo que falta (ArgoCD, Kyverno en el clúster real, Sealed Secrets, disparar el pipeline hacia AKS). Terraform no crea el clúster en sí — solo administra namespace/cuotas/RBAC dentro de uno que ya existe (ver `terraform/README.md`) — por eso el clúster se creó primero, a mano con `az aks create`, siguiendo el procedimiento ya documentado en `P8/README.md`.
+
+## Fase 8 — ArgoCD real, sincronizando el clúster de verdad
+
+**Qué se hizo, comando por comando:**
+
+### 1. Instalar ArgoCD
+
+```bash
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+El `--dry-run=client -o yaml | kubectl apply -f -` es el patrón para crear un namespace de forma idempotente (no falla si ya existe, a diferencia de `kubectl create namespace` a secas). El segundo comando es el manifiesto oficial de instalación de ArgoCD (deployments, CRDs, RBAC). **Falló**: `metadata.annotations: Too long: may not be more than 262144 bytes` en el CRD de `ApplicationSet` — el mismo límite de 256KB en la anotación `last-applied-configuration` que ya habíamos documentado para los CRDs de Argo Rollouts en el job `deploy-kind` del pipeline. Se reconoció el error al toque por ser el mismo patrón, y se resolvió igual:
+
+```bash
+kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd wait --for=condition=available --timeout=180s deployment --all
+```
+
+`--server-side` mueve el cálculo del diff al propio API server (que no tiene ese límite de 256KB, es una limitación específica del enfoque cliente de `last-applied-configuration`). El `wait` es para no seguir hasta que los 6 deployments de ArgoCD estén realmente disponibles, no solo creados.
+
+### 2. Leer antes de aplicar (comandos de solo lectura, nada se modificó)
+
+```bash
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/argocd/application.yaml --jq '.content' | base64 -d
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/charts/sa-platform --jq '.[].name'
+gh api repos/ELFBIBv/Practicas-SA-B-202203856-gitops/contents/charts/sa-platform/values-azure.yaml --jq '.content' | base64 -d
+```
+
+Antes de aplicar un `Application` de ArgoCD contra un clúster real, había que saber exactamente qué iba a hacer: a qué repo/rama/path apunta, si el chart ya tenía contenido real (sí, de una sincronización manual anterior del repo GitOps) y qué necesitaba `values-azure.yaml` para funcionar. Ahí se vio que el chart pide dos secretos (`ghcr-secret`, `sa-platform-nats-auth`) que el repo GitOps **deliberadamente no versiona en texto plano** (así lo dice su propio README).
+
+### 3. Confirmar que los paquetes de GHCR son privados, antes de pedir un token
+
+```bash
+gh api /orgs/ELFBIBv/packages/container/sa-api-gateway   # 404, no aplica (no es org)
+gh api /user/packages/container/sa-api-gateway            # 403: falta scope read:packages
+docker logout ghcr.io
+docker pull ghcr.io/elfbibv/sa-api-gateway:6d8d12d         # unauthorized
+```
+
+En vez de asumir que hacía falta un token y pedírselo al usuario sin más, se probó un pull completamente anónimo (`docker logout` primero, para no arrastrar ninguna sesión previa). `unauthorized` (no `not found`) confirma que el paquete es privado de verdad — si fuera público, el pull anónimo habría funcionado igual.
+
+### 4. Crear los dos secretos que el chart necesita
+
+```bash
+NATS_TOKEN=$(openssl rand -hex 32)
+kubectl create secret generic sa-platform-nats-auth -n sa-p5 --from-literal=token="$NATS_TOKEN"
+```
+
+Este lo generó el agente porque no depende de ninguna cuenta externa: es solo un valor aleatorio para que los pods de NATS se autentiquen entre ellos, nadie más lo necesita saber.
+
+```bash
+kubectl create secret docker-registry ghcr-secret -n sa-p5 \
+  --docker-server=ghcr.io --docker-username=ELFBIBv --docker-password=<PAT del usuario>
+```
+
+Este lo creó el usuario, con su propio Personal Access Token de GitHub (scope `read:packages`). Generar tokens de acceso de una cuenta ajena no es algo que un agente deba hacer por su cuenta, aunque técnicamente pudiera pedirlo — es una credencial real de la persona dueña de la cuenta.
+
+```bash
+kubectl get secret ghcr-secret -n sa-p5   # solo para confirmar que ya existía antes de seguir
+```
+
+### 5. Aplicar la Application y diagnosticar por qué no sincronizaba
+
+```bash
+kubectl apply -f application.yaml
+kubectl get application sa-platform -n argocd
+kubectl describe application sa-platform -n argocd
+```
+
+Quedó en `OutOfSync`. El `describe` mostró la causa real en sus eventos: `Rollout.argoproj.io "" not found`, `AnalysisTemplate.argoproj.io "" not found`. El clúster `aks-sa-p8` nunca había tenido instalados los CRDs de Argo Rollouts — solo se instalaban dentro de los clústeres `kind` efímeros que usa el pipeline de CI para sus propias pruebas, nunca contra AKS. Mismo fix ya usado ahí:
+
+```bash
+kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply --server-side --force-conflicts -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+```
+
+### 6. Forzar el reintento sin esperar el backoff automático
+
+```bash
+kubectl annotate application sa-platform -n argocd argocd.argoproj.io/refresh=hard --overwrite
+```
+
+ArgoCD ya tenía reintentos automáticos programados (`retry.limit: 3` con backoff creciente, definido en el propio `application.yaml`), pero esperar minutos de backoff sin necesidad no tenía sentido ahora que la causa raíz (CRDs faltantes) ya estaba resuelta — este annotation le pide un refresh y reintento inmediatos.
+
+### 7. Verificar que quedó sano de verdad, no solo "Synced"
+
+```bash
+kubectl rollout status deployment/sa-platform-auth -n sa-p5      # y catalog, notifications, orders
+kubectl rollout status statefulset/sa-platform-mysql -n sa-p5    # y mongodb, nats
+bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway sa-p5 Healthy 180
+kubectl get pods,svc -n sa-p5
+curl http://<IP-pública-del-LoadBalancer>/health
+curl -X POST http://<IP-pública>/api/catalog/graphql -d '{"query":"{ products { id } }"}'
+```
+
+`Synced` en ArgoCD solo confirma que los manifiestos ya se aplicaron al clúster, no que la aplicación esté realmente sirviendo tráfico. Por eso se esperó cada componente explícitamente (deployments, luego statefulsets — mismo orden que ya se había aprendido que importa, ver Fase 5) y, al final, se le mandó tráfico HTTP real a la IP pública que Azure le asignó al `Service` tipo `LoadBalancer`, para confirmar con una respuesta real y no con el estado reportado por Kubernetes.
+
+**Resultado:** `Synced` / `Healthy`, 7 servicios corriendo (`1/1` o `2/2` cada uno), Rollout del gateway en fase `Healthy`, respuestas reales de `/health` y de la GraphQL de `catalog` desde una IP pública de internet — no `port-forward`, no `kind`.
+
+**Por qué:** es el corazón del entregable de la práctica — que ArgoCD, no el pipeline de CI, sea quien aplica cambios al clúster real. Con esto, la separación que ya estaba documentada en el README del repo GitOps (el pipeline de código nunca toca AKS directamente) queda demostrada en la práctica, no solo escrita.
+
+### 8. Entrar a la UI de ArgoCD y sacar la evidencia visual
+
+ArgoCD, por defecto, expone su servidor (`argocd-server`) como `ClusterIP` — sin IP pública, a propósito: su usuario `admin` puede modificar cualquier cosa del clúster, y dejarlo abierto a todo internet sin SSO/autenticación adicional sería un riesgo real que no tenía sentido asumir solo para esta entrega. Para llegar a la UI sin exponerla, se usó el mecanismo estándar de `kubectl`, un túnel autenticado contra el propio API server de AKS (no expone nada nuevo hacia afuera):
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+
+El primer comando saca la contraseña autogenerada del usuario `admin` (Secret que ArgoCD crea solo en su primera instalación); el `; echo` es solo para que el prompt no quede pegado al valor decodificado, ya que `base64 -d` no agrega salto de línea. El segundo abre el túnel: quien entra a `https://localhost:8080` en su navegador en realidad está hablando, a través de ese túnel, con el pod `argocd-server` corriendo en Azure — no hay ningún servidor corriendo localmente (se explicó la mecánica completa en la conversación, dado que no era obvio a primera vista).
+
+Con la sesión iniciada (`admin` + esa contraseña), se sacaron dos capturas reales, guardadas en [`P8/evidencia/`](evidencia/):
+
+- [`argocd-sync.png`](evidencia/argocd-sync.png): vista de árbol de recursos de la `Application` — `Healthy`/`Synced`, con cada componente (`sa-platform-auth`, `sa-platform-catalog`, `sa-platform-notifications`, `sa-platform-orders`, cuotas, límites) mostrando su propio estado de salud.
+- [`argocd-historial.png`](evidencia/argocd-historial.png): pestaña "History and Rollback", detalle del último sync — iniciado por `automated sync policy` (no a mano), 1m35s de duración, y el mismo commit "Merge pull request #2 from ELFBIBv/promote/6d8d12d" que se describe abajo.
+
+**Hallazgo al revisar esa captura:** el mensaje del commit sincronizado (`Merge pull request #2 from ELFBIBv/promote/6d8d12d`) llevó a revisar el [PR #2 del repo GitOps](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops/pull/2) con `gh pr view 2 --repo ELFBIBv/Practicas-SA-B-202203856-gitops --json title,url,mergedAt,body,commits`. Confirma que el job `promote-to-gitops` del pipeline **ya se había disparado y mergeado de verdad** (autor `sa-platform-ci`, el bot configurado en ese job), el 18/09 04:08 UTC — antes de que ArgoCD existiera en este clúster. O sea: el mecanismo "CI abre PR → se mergea" ya estaba probado de punta a punta; lo que faltaba, y se completó hoy, era tener un ArgoCD real esperando para recogerlo.
+
+**Qué queda pendiente de esta fase:** aunque el mecanismo de PR ya se probó una vez (PR #2, antes de esta sesión), no hubo todavía una corrida fresca de `workflow_dispatch` que dispare ese mismo flujo con **todo lo que se agregó después** (Kyverno, k6, informe de incidente) y que ArgoCD la sincronice en vivo mientras está corriendo — eso es lo que falta para una evidencia end-to-end completamente actual. Los dos secretos (`ghcr-secret`, `sa-platform-nats-auth`) siguen siendo secretos planos creados a mano, no Sealed Secrets — esa migración sigue pendiente.
+
+## Fase 9 — Kyverno en el clúster real, incluyendo el camino "permitido" completo
+
+**Qué se hizo:** se instaló Kyverno en `aks-sa-p8` (mismo mecanismo que en `kind`, Fase 4) y se aplicaron las 3 políticas de `P8/kyverno/policies/`:
+
+```bash
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace --wait --timeout 180s
+kubectl apply -f P8/kyverno/policies/
+```
+
+**Caso rechazado, contra el clúster real:**
+
+```bash
+kubectl run policy-check-external-image --image=nginx:latest --restart=Never
+```
+
+Rechazado en el acto por `restrict-image-registries` y `require-non-root-user` simultáneamente — mismo resultado que ya se había probado en `kind`, ahora confirmado contra AKS.
+
+**Caso permitido — esta vez sí se pudo cerrar del todo, a diferencia de la Fase 4:** en `kind` no se había podido probar el camino "permitido" de `verify-image-signatures` porque ningún token a mano tenía scope `read:packages` real. Acá sí, porque ya existe `ghcr-secret` en `sa-p5` con el PAT real del usuario. El problema es que Kyverno necesita sus propias credenciales de registry — no las del pod que se está evaluando — así que hubo que dárselas al propio controlador de Kyverno:
+
+```bash
+# Copiar el secret ya existente al namespace donde vive el admission controller de Kyverno
+kubectl get secret ghcr-secret -n sa-p5 -o json | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); d['metadata']={'name':'ghcr-secret','namespace':'kyverno'}; print(json.dumps(d))" | \
+  kubectl apply -f -
+
+# helm show values kyverno/kyverno reveló el campo correcto: no es un --extraArgs
+# (eso se había probado sin éxito en la Fase 4), es un valor raíz del chart:
+helm upgrade kyverno kyverno/kyverno -n kyverno --reuse-values \
+  --set existingImagePullSecrets[0]=ghcr-secret --wait --timeout 180s
+```
+
+Con eso wireado, se probó primero con la imagen que el chart tiene desplegada hoy (`sa-notification-service:6d8d12d`): Kyverno **sí logró autenticarse** (el error cambió de `UNAUTHORIZED: authentication required` a `no signatures found` — prueba de que la credencial ya funcionaba), pero esa build en particular no tenía firma asociada. Se repitió con una imagen que sí se había confirmado firmada en esta misma sesión (`ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e...`, la misma referencia de la fila "Imagen firmada" del README):
+
+```bash
+kubectl run policy-check-signed2 \
+  --image="ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e02de72c2092a554fba5ed3e1da8b1331091c38ccb3a8bc262b9763" \
+  --overrides='{"spec":{"containers":[{"...","securityContext":{"runAsNonRoot":true,"runAsUser":10001}}]}}' \
+  --dry-run=server
+# → pod/policy-check-signed2 created (server dry run)
+```
+
+**Admitido.** Con esto quedan demostradas las 3 políticas en ambas direcciones, contra el clúster real: rechazan lo que no cumple y permiten lo que sí — incluyendo la verificación criptográfica real de la firma de Cosign, que en la Fase 4 había quedado como pendiente por una limitación de credenciales del entorno de prueba, no de la política en sí.
+
+**Por qué:** cerraba una brecha real: en la Fase 4 se dejó documentado explícitamente que el camino "permitido" de `verify-image-signatures` no se había probado por falta de credenciales, y que se completaría "cuando Kyverno se instale en el AKS real". Este es exactamente ese momento.
+
+## Fase 10 — Sealed Secrets: los dos secretos ya no son texto plano
+
+**Qué se hizo:** se instaló el controlador de Sealed Secrets y se migraron `ghcr-secret` y `sa-platform-nats-auth` (creados a mano en la Fase 8) a `SealedSecret` cifrados, verificando el ciclo completo — no solo que "se aplicó sin error".
+
+```bash
+# El repo de Helm de Bitnami se movió de bitnami-labs a bitnami (redirect 301
+# confirmado); con la URL vieja el repo daba 404.
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
+helm install sealed-secrets-controller sealed-secrets/sealed-secrets -n kube-system --wait --timeout 180s
+```
+
+Se instaló también el CLI `kubeseal` (binario oficial de GitHub Releases, mismo patrón que k6/terraform/kind en fases anteriores). Para cada secreto, se tomó el contenido real ya existente en el clúster (no se volvió a pedir el token de GHCR ni se regeneró el de NATS) y se cifró contra la clave pública del controlador:
+
+```bash
+kubectl get secret <nombre> -n sa-p5 -o json | python3 -c "..." | \
+  kubeseal --controller-name=sealed-secrets-controller --controller-namespace=kube-system --format yaml \
+  > <nombre>-sealed.yaml
+```
+
+**Verificación real, no solo "se aplicó":** al aplicar el `SealedSecret` con el mismo nombre/namespace que el `Secret` plano ya existente, el controlador **se negó a pisarlo** (`"already exists and is not managed by SealedSecret"`) — comportamiento de seguridad esperado, no un bug: no adopta secretos que no creó él. Para completar la migración había que borrar el plano primero y dejar que el `SealedSecret` lo regenerara:
+
+```bash
+kubectl delete secret ghcr-secret -n sa-p5
+kubectl delete sealedsecret ghcr-secret -n sa-p5   # forzar reconciliación; un "apply" sin cambios no dispara reintento
+kubectl apply -f ghcr-secret-sealed.yaml
+```
+
+Con eso, `kubectl get sealedsecret` mostró `SYNCED: True` y el `Secret` resultante pasó a tener `ownerReferences` apuntando al `SealedSecret`. Se comparó el `.dockerconfigjson` descifrado contra el original (`diff` entre ambos, decodificados de base64) — **idéntico**. Se repitió el mismo procedimiento para `sa-platform-nats-auth`. Después de migrar los dos, se confirmó que la `Application` de ArgoCD seguía `Synced`/`Healthy` y que los pods de `sa-p5` seguían corriendo sin interrupciones.
+
+Los dos archivos `SealedSecret` resultantes (cifrados, seguros de versionar) se prepararon en un clon local del repo GitOps, en una carpeta nueva `sealed-secrets/` con su propio README explicando cómo se generan y qué pasa si el clúster se recrea desde cero. **No se publicaron** — en un entorno académico, con la migración ya verificada funcionando de punta a punta contra el clúster real (que es lo que demuestra la práctica), no había necesidad real de además abrir un PR y mergearlo en un repositorio aparte solo para dejar una copia de los mismos archivos cifrados. El paso 4 del procedimiento del README documenta igual cómo se generarían y aplicarían, para quien sí lo necesite.
+
+**Por qué:** el propio README del repo GitOps ya dejaba anotado desde la Fase 8 que los secretos creados a mano eran un paso intermedio, pendiente de migrar. Con Sealed Secrets, el valor cifrado sí puede vivir en el repo público sin exponer nada — solo el controlador del clúster real puede descifrarlo — cerrando la única pieza de la cadena de suministro que hasta ahora dependía de un paso manual fuera de cualquier control de versiones.

@@ -2,20 +2,20 @@
 
 Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, aplicado sobre una copia propia de la plataforma de microservicios originada en la práctica 5 (igual que la práctica 6 trabajó sobre su propia copia del chart de Helm, sin tocar `/P5`). El pipeline vive en [`/.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.yml) (GitHub solo reconoce workflows ubicados en esa ruta exacta en la raíz del repositorio) y actúa exclusivamente sobre el código copiado en `P8/api-gateway`, `P8/auth`, `P8/catalog`, `P8/orders`, `P8/notifications`, `P8/cronjobs` y sobre el chart de Helm en `P8/charts/sa-platform`. **La carpeta `/P5` no se modificó.**
 
-> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7. Lo que ya está implementado (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)): se eliminó el flujo de despliegue directo, el código de Terraform (namespace, cuotas, límites, RBAC) existe en [`P8/terraform/`](terraform/), y el pipeline ahora escanea con Trivy (bloqueante ante `CRITICAL`), genera SBOM y firma con Cosign antes de publicar cualquier imagen en GHCR. Pendiente: correr `terraform apply` contra un AKS real, instalar ArgoCD, Kyverno, pruebas de carga, y completar la tabla de enlaces obligatoria abajo (todavía marcada `PENDIENTE`) con evidencia real de una corrida del pipeline.
+> **Estado de la entrega:** este README todavía no cumple con el formato de entrega exigido por el enunciado (`Practica_8_2S2026.md`, sección 4.1). Las secciones de arquitectura y procedimientos de abajo siguen describiendo en buena parte el pipeline heredado de la Práctica 7. Lo que ya está implementado (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)): se eliminó el flujo de despliegue directo; el pipeline escanea con Trivy (bloqueante ante `CRITICAL`), genera SBOM y firma con Cosign antes de publicar cualquier imagen en GHCR; 3 políticas de admisión de Kyverno en [`P8/kyverno/policies/`](kyverno/policies/); una prueba de carga con k6 en [`P8/loadtest/`](loadtest/); el [informe de incidente](informe-incidente.md) del fallo inducido y el [diagrama del flujo](diagrama-flujo.md); el clúster `aks-sa-p8` real está levantado con el Terraform de [`P8/terraform/`](terraform/) aplicado; **ArgoCD ya está instalado y sincronizando de verdad** (`Application` `sa-platform` en `Synced`/`Healthy`, 7 servicios corriendo en `sa-p5`, gateway respondiendo en IP pública real, con capturas reales de la UI); **Kyverno también ya está instalado en ese mismo clúster real**, con las 3 políticas probadas en ambas direcciones — incluyendo la verificación criptográfica real de la firma de Cosign de una imagen ya publicada, que en `kind` había quedado pendiente por falta de credenciales de prueba; y **`ghcr-secret`/`sa-platform-nats-auth` ya son `SealedSecret` cifrados**, no secretos planos — migración verificada de punta a punta (contenido descifrado idéntico al original, app siguió `Synced`/`Healthy` durante y después del cambio). Pendiente: disparar el pipeline completo con `workflow_dispatch` para que el PR al repo GitOps sea el que dispare el próximo sync en vivo (ya se probó una vez antes de esta sesión, PR #2, pero sin todo lo agregado después), video, y completar las filas que faltan abajo.
 
 ## Tabla de enlaces obligatoria (sección 4.1 del enunciado)
 
 | Ítem | Enlace o dato requerido |
 | --- | --- |
 | Repositorio GitOps | https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops |
-| Aplicación en ArgoCD | PENDIENTE (falta instalar ArgoCD en el clúster persistente y aplicar `argocd/application.yaml` del repo GitOps) |
-| Ejecución exitosa del pipeline | PENDIENTE |
-| Reversión automática | PENDIENTE |
-| Despliegue rechazado por política | PENDIENTE |
+| Aplicación en ArgoCD | `sa-platform`, namespace `argocd` (destino: namespace `sa-p5` del clúster `aks-sa-p8`) — `Synced`/`Healthy`. Capturas reales: [estado actual](evidencia/argocd-sync.png) y [historial de sincronizaciones](evidencia/argocd-historial.png) (sync automático, `automated sync policy`, 1m35s). Detalle en `CAMBIOS-GITOPS.md`, Fase 8. |
+| Ejecución exitosa del pipeline | https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033 (todos los jobs en verde, incluyendo Kyverno y k6) + [PR #2 al repo GitOps](https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops/pull/2), abierto y mergeado automáticamente por el job `promote-to-gitops` — evidencia real de que el mecanismo CI→PR→merge funciona de punta a punta. PENDIENTE una corrida fresca con `workflow_dispatch` que incluya todo lo agregado después (Kyverno, k6, informe) y que ArgoCD la sincronice en vivo. |
+| Reversión automática | Run: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632563 — Rollout `sa-platform-api-gateway`, revisión 3 abortada automáticamente (`Status: ✖ Degraded`, canary escalado a 0 réplicas). Detalle completo en [`informe-incidente.md`](informe-incidente.md). Corresponde al `kind` efímero del pipeline, no a AKS todavía. |
+| Despliegue rechazado por política | **Contra el clúster AKS real** (`aks-sa-p8`): `kubectl run policy-check-external-image --image=nginx:latest` rechazado por `restrict-image-registries` + `require-non-root-user`. Y el camino permitido, también verificado ahí: una imagen real firmada (`ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e...`) fue **admitida** tras verificar su firma de Cosign de verdad (`verify-image-signatures`). Detalle completo en `CAMBIOS-GITOPS.md`, Fase 9. (Evidencia adicional del mismo rechazo en el `kind` efímero de CI: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632485) |
 | Bloqueo por vulnerabilidad crítica | PR bloqueado: https://github.com/ELFBIBv/Practicas-SA-B-202203856/pull/1 — job fallido (3 CVE CRITICAL en `api-gateway`, ver también otros 5 servicios bloqueados en el mismo PR): https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35315634021/job/105506751987?pr=1 |
-| Imagen firmada | PENDIENTE |
-| Reporte de prueba de carga | PENDIENTE |
+| Imagen firmada | `ghcr.io/elfbibv/sa-api-gateway@sha256:0d4942874e02de72c2092a554fba5ed3e1da8b1331091c38ccb3a8bc262b9763` — firmada con Cosign (keyless/OIDC) en https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105696917236 |
+| Reporte de prueba de carga | Script: [`P8/loadtest/api-gateway-load-test.js`](loadtest/api-gateway-load-test.js). Corrida real en verde: https://github.com/ELFBIBv/Practicas-SA-B-202203856/actions/runs/35374724033/job/105697632524 (reporte JSON subido como artifact de ese job). |
 | Video demostrativo | PENDIENTE |
 
 ## Estado actual
@@ -25,9 +25,10 @@ Esta carpeta contiene el pipeline de CI/CD construido con **GitHub Actions**, ap
 | Build + Test | **Verificado en GitHub Actions** | 6 jobs, uno por servicio, con bases de datos reales (MySQL/MongoDB) como contenedores de servicio. Corrieron en verde en `main`, `develop` y `feature/Practica8`. |
 | Dockerización + Push a GHCR | **Verificado en GitHub Actions** | Las 7 imágenes se construyen y publican en `ghcr.io/elfbibv/*` sin errores. |
 | Despliegue efímero en **kind** | **Automático, corre después de cada push (no en PR)** | El job `deploy-kind` descarga las 7 imágenes recién publicadas en GHCR (las mismas que se acaban de subir, no una copia reconstruida aparte), crea un clúster real de Kubernetes (temporal) dentro del propio runner, y aplica el mismo chart de Helm. Sirve para validar el chart y los manifiestos en cada cambio, sin depender de Azure. |
-| Despliegue a AKS | **Evidencia histórica de P7 (helm upgrade --install directo), obsoleta** | El clúster `aks-sa-p8`/`rg-practica8` con ArgoCD instalado y el flujo GitOps completo (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md)) todavía no existe ni se ha verificado; esta fila queda pendiente hasta entonces. |
+| Despliegue a AKS | **Verificado, vía ArgoCD real** | Clúster `aks-sa-p8`/`rg-practica8`, Terraform aplicado, ArgoCD instalado y sincronizando la `Application` `sa-platform` (`Synced`/`Healthy`). Los 7 servicios corren en `sa-p5`, el gateway responde en una IP pública real, con sus secretos ya cifrados vía Sealed Secrets (ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), Fases 8 y 10). |
+| Kyverno en AKS | **Verificado contra el clúster real** | Las 3 políticas de [`P8/kyverno/policies/`](kyverno/policies/) instaladas y probadas en `aks-sa-p8`: rechazo real confirmado, y también el camino permitido (una imagen firmada de verdad fue admitida tras verificar su firma de Cosign). Ver [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), Fase 9. |
 
-Se validó de punta a punta: build, test, dockerización, push a GHCR y despliegue efímero automático en kind. El despliegue real a AKS vía ArgoCD todavía está pendiente (falta instalar ArgoCD, ver CAMBIOS-GITOPS.md).
+Se validó de punta a punta: build, test, dockerización, push a GHCR, despliegue efímero automático en kind, **y ahora también el despliegue real a AKS vía ArgoCD y las políticas de Kyverno contra ese mismo clúster**, todo sincronizado y saludable.
 
 ## Arquitectura del pipeline
 
@@ -238,11 +239,23 @@ cd ../..
 
 Guardar `plan.log`, `apply.log` y la salida de ese último `kubectl get` como evidencia — van enlazados desde la tabla de enlaces obligatoria.
 
-### 4. Crear el `imagePullSecret` de GHCR directamente en el clúster (manual, ya no vía CI)
+### 4. Crear los secretos que el chart necesita (manual, ya no vía CI)
 
-> Desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), este secreto ya no lo crea el pipeline (antes lo hacía el job `deploy-to-aks`, hoy eliminado). Se crea una sola vez, a mano, contra el clúster real. Ver también la nota sobre migrarlo a Sealed Secrets/External Secrets pendiente en el repo GitOps.
+> Desde la Fase 1 de [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), estos secretos ya no los crea el pipeline (antes lo hacía el job `deploy-to-aks`, hoy eliminado). Se crean una sola vez, a mano, contra el clúster real.
 
-En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. El namespace ya lo creó Terraform en el paso anterior, así que alcanza con:
+**Si el repo GitOps ya tiene una carpeta `sealed-secrets/`** (de una migración anterior a Sealed Secrets, ver Fase 10 de `CAMBIOS-GITOPS.md`), no hace falta recrear los valores a mano — alcanza con instalar el controlador y aplicar esos manifiestos ya cifrados:
+
+```bash
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
+helm install sealed-secrets-controller sealed-secrets/sealed-secrets -n kube-system --wait --timeout 180s
+kubectl apply -f sealed-secrets/   # dentro del clon del repo GitOps
+```
+
+**Ojo:** los `SealedSecret` están cifrados contra la clave del controlador de un clúster específico. Si este es un clúster nuevo (no el mismo `aks-sa-p8` de antes), esos archivos no van a descifrar — hay que crear los secretos a mano una vez (como abajo) y volver a cifrarlos contra el controlador nuevo.
+
+Dos secretos, por dos motivos distintos:
+
+**`ghcr-secret`** — para que el clúster pueda bajar las imágenes privadas de GHCR. En GitHub: **Settings (de tu cuenta) → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, con el scope `read:packages` únicamente. El namespace ya lo creó Terraform en el paso anterior:
 
 ```bash
 kubectl create secret docker-registry ghcr-secret \
@@ -250,6 +263,14 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io \
   --docker-username="ELFBIBv" \
   --docker-password="TU_TOKEN_read:packages"
+```
+
+**`sa-platform-nats-auth`** — token de autenticación entre los pods de NATS, que `values-azure.yaml` referencia (`global.natsAuthSecretName`). No depende de ninguna cuenta externa, es solo un valor aleatorio:
+
+```bash
+kubectl create secret generic sa-platform-nats-auth \
+  --namespace "$NAMESPACE" \
+  --from-literal=token="$(openssl rand -hex 32)"
 ```
 
 ### 5. Cargar `GITOPS_PAT` en el repositorio de código
@@ -260,21 +281,84 @@ Este es el único secret que necesita el pipeline de CI hoy (ver detalle de gene
 echo "TU_TOKEN_AQUI" | gh secret set GITOPS_PAT --repo ELFBIBv/Practicas-SA-B-202203856
 ```
 
-### 6. Instalar ArgoCD y aplicar la Application (pendiente, todavía no implementada)
+### 6. Instalar ArgoCD y aplicar la Application
 
-Con el clúster, la infraestructura Terraform y el `imagePullSecret` ya listos, falta instalar ArgoCD dentro de AKS y aplicar `argocd/application.yaml` del repo GitOps para que empiece a sincronizar `sa-p5`. Esta fase todavía no se hizo — se documentará y ejecutará cuando lleguemos a ella.
+Probado de punta a punta contra un clúster real — comandos reales, en el orden que realmente funciona (ver el detalle completo, incluyendo los dos problemas que aparecen si se salta algún paso, en [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), Fase 8):
 
-### 7. Disparar la promoción
+```bash
+# 1. ArgoCD
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+# --server-side evita el límite de 256 KB en la anotación last-applied-configuration
+# que rompe con el CRD de ApplicationSet bajo un "kubectl apply" normal.
+kubectl apply --server-side --force-conflicts -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd wait --for=condition=available --timeout=180s deployment --all
 
-**Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `promote-to-gitops` sincroniza el chart hacia `Practicas-SA-B-202203856-gitops`, actualiza el tag de imagen, y abre un Pull Request ahí — **no** toca el clúster. El cambio llega al clúster recién cuando ese PR se mergea y ArgoCD (todavía pendiente de instalar) lo sincroniza.
+# 2. CRDs de Argo Rollouts — el chart define recursos Rollout/AnalysisTemplate;
+#    sin esto, el primer sync de ArgoCD falla con "no matches for kind Rollout".
+kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply --server-side --force-conflicts -n argo-rollouts \
+  -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+kubectl -n argo-rollouts wait --for=condition=available --timeout=180s deployment --all
+
+# 3. La Application (ya existe en el repo GitOps, apunta a charts/sa-platform)
+curl -sL https://raw.githubusercontent.com/ELFBIBv/Practicas-SA-B-202203856-gitops/main/argocd/application.yaml \
+  | kubectl apply -f -
+
+# 4. Verificar que sincronizó de verdad, no solo "Synced"
+kubectl get application sa-platform -n argocd
+for dep in $(kubectl get deployment -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+  kubectl rollout status "deployment/$dep" -n "$NAMESPACE" --timeout=180s
+done
+for sts in $(kubectl get statefulset -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+  kubectl rollout status "statefulset/$sts" -n "$NAMESPACE" --timeout=180s
+done
+bash P8/scripts/wait-for-rollout.sh sa-platform-api-gateway "$NAMESPACE" Healthy 180
+```
+
+Para ver la UI (`Synced`/`Healthy`, historial de sincronizaciones):
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+# abrir https://localhost:8080, usuario admin, la contraseña de arriba
+```
+
+### 7. Instalar Kyverno y aplicar las 3 políticas de admisión
+
+Probado de punta a punta contra un clúster real (detalle completo, incluyendo el caso rechazado y el caso permitido con verificación de firma real, en [`CAMBIOS-GITOPS.md`](CAMBIOS-GITOPS.md), Fase 9):
+
+```bash
+helm repo add kyverno https://kyverno.github.io/kyverno/
+helm repo update
+helm install kyverno kyverno/kyverno -n kyverno --create-namespace --wait --timeout 180s
+kubectl apply -f P8/kyverno/policies/
+kubectl get clusterpolicy
+```
+
+Opcional, solo si querés que `verify-image-signatures` pueda verificar firmas de verdad (si no, la política sigue activa pero falla cerrado por falta de credenciales, que también es una demostración válida): copiar `ghcr-secret` al namespace `kyverno` y decírselo al chart:
+
+```bash
+kubectl get secret ghcr-secret -n "$NAMESPACE" -o json | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); d['metadata']={'name':'ghcr-secret','namespace':'kyverno'}; print(json.dumps(d))" | \
+  kubectl apply -f -
+helm upgrade kyverno kyverno/kyverno -n kyverno --reuse-values \
+  --set existingImagePullSecrets[0]=ghcr-secret --wait --timeout 180s
+```
+
+### 8. Disparar la promoción
+
+**Actions → CI/CD - Plataforma de Microservicios (Practica 8) → Run workflow**, elegir la rama, marcar el checkbox `deploy` y ejecutar. El job `promote-to-gitops` sincroniza el chart hacia `Practicas-SA-B-202203856-gitops`, actualiza el tag de imagen, y abre un Pull Request ahí — **no** toca el clúster. El cambio llega al clúster cuando ese PR se mergea; con ArgoCD ya instalado (paso 6) y `syncPolicy.automated` activado, lo sincroniza solo, sin que nadie corra `kubectl`.
 
 > **Requisito no obvio:** el botón "Run workflow" (y el disparo manual en general) **solo aparece si `.github/workflows/ci-cd.yml` ya existe en la rama por defecto del repositorio** (`main`), sin importar en qué rama se quiera correr el deploy después. Si se recrea este proyecto en un repositorio nuevo y se desarrolla todo en una rama `feature/...`, hay que mergear esa rama hacia `main` al menos una vez antes de que GitHub habilite el disparo manual — es una restricción de la plataforma, no de este workflow en particular.
 
-### 8. Verificar y, cuando termines, eliminar el clúster
+### 9. Verificar y, cuando termines, eliminar el clúster
 
 ```bash
 kubectl get pods -n "$NAMESPACE"
 kubectl get service sa-platform-api-gateway -n "$NAMESPACE"
+kubectl get application sa-platform -n argocd
+kubectl get clusterpolicy
 
 # Cuando ya no se necesite (para no seguir generando costo):
 az group delete --name "$RESOURCE_GROUP" --yes --no-wait

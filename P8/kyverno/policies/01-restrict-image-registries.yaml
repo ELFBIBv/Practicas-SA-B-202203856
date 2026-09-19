@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restringir registries de imágenes permitidos
+    policies.kyverno.io/category: Cadena de suministro (sa-platform)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Solo se permiten imágenes publicadas por el propio pipeline de CI en
+      ghcr.io/elfbibv/*. Rechaza cualquier imagen de Docker Hub, de otro
+      registry o de otro owner de GHCR (evita que alguien despliegue algo
+      que nunca pasó por el escaneo de Trivy ni por la firma de Cosign).
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: >-
+          Solo se permiten imágenes de ghcr.io/elfbibv/* (política de la
+          cadena de suministro de sa-platform).
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "ghcr.io/elfbibv/*"
