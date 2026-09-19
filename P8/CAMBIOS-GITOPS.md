@@ -148,6 +148,18 @@ Al subir el fix de la Fase 3.2, el job "Test: order-service" empezó a fallar en
 
 **Lección para las próximas veces:** al subir una dependencia solo para resolver una CVE, conviene subir al **mínimo** que resuelve el problema, no al último release disponible — saltos más grandes traen más riesgo de romper compatibilidad con el resto del código (en este caso, con una versión vieja de Starlette que ningún commit de esta fase tocó). Y, sobre todo: verificar corriendo los tests reales, no solo instalando las dependencias — el venv sin tests habría dejado pasar este error igual.
 
+### Fase 3.4 — Nueva CVE real, meses después: `anyio` 3.7.1 (CVE-2026-63374)
+
+Al mergear `feature/Practica8` a `main` para disparar la corrida fresca del pipeline (después de todas las fases anteriores), Trivy bloqueó de nuevo — esta vez `catalog-service` y `order-service`, con una CVE **CRITICAL** distinta y más reciente: `CVE-2026-63374` en `anyio==3.7.1` ("TLSStream IDNA 2003 host name encoding enables potential TLS certificate spoofing"), corregida en `4.14.2`. Ni catalog ni orders fijan `anyio` directo en su `requirements.txt` — llega transitivo, y quien lo fija es `fastapi==0.103.1` (`Requires-Dist: anyio<4.0.0,>=3.7.1`), así que la 3.7.1 era simplemente la más vieja permitida por esa restricción, sin que nadie la hubiera pedido a propósito.
+
+**Investigación antes del fix:** subir `anyio` solo (`pip install anyio>=4.14.2`) falla de inmediato con `ResolutionImpossible` contra `fastapi==0.103.1` — confirma que hay que subir `fastapi` también. Se descargaron los wheels de varias versiones de `fastapi` (`0.104.0` a `0.110.0`) y se inspeccionó su `METADATA` directamente (`unzip -p ... | grep anyio`) para encontrar la primera que **deja de fijar** `anyio`: `0.104.0`–`0.107.0` todavía tienen `anyio<4.0.0`; `0.108.0` ya no lo declara (queda a cargo de `starlette`, que si permite `<5`). Mínimo real: `fastapi==0.108.0`.
+
+**Fix:** `fastapi==0.103.1` → `0.108.0` y `anyio>=4.14.2` fijado explícito, en los `requirements.txt` de `catalog-service` y `order-service`. Efecto colateral esperado: `starlette` sube de `0.27.0` a `0.32.0.post1` (lo exige `fastapi==0.108.0`), pero es una dependencia transitiva sana, no algo que haya que fijar a mano.
+
+**Verificado, no solo escrito:** se instalaron ambos `requirements.txt` completos en venvs limpios (sin conflictos), se levantaron MongoDB y MySQL reales en Docker (mismo esquema que usa CI para orders), y se corrieron los tests reales de los dos servicios: **3 passed** en catalog, **3 passed** en orders. Se reconstruyeron las dos imágenes de Docker completas y se escanearon con Trivy real: **0 CRITICAL** en ambas (confirmado parseando el JSON, no solo leyendo la tabla).
+
+**Por qué importa dejarlo anotado:** confirma que el escaneo bloqueante de Trivy sigue funcionando como control real incluso meses después de la Fase 3 — no es un cheque que se corrió una vez y se olvidó, vuelve a bloquear cada vez que aparece una CVE nueva en cualquier dependencia, directa o transitiva.
+
 ## Fase 4 — Kyverno: 3 políticas de admisión
 
 **Qué se hizo:**
