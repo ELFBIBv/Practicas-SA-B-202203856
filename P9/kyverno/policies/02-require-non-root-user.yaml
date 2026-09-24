@@ -1,0 +1,53 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root-user
+  annotations:
+    # Validar el Pod efectivo permite usar excepciones por nombre exacto y
+    # evita que una etiqueta falsificada desactive esta política.
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Exigir usuario no-root
+    policies.kyverno.io/category: Seguridad de pods (sa-platform)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Todo pod debe declarar runAsNonRoot: true, a nivel de pod o de cada
+      contenedor. Coincide con lo que ya hacen todos los Dockerfile del
+      proyecto (USER 10001) — esta política solo formaliza esa convención
+      como una regla del clúster, no un acuerdo informal del equipo.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-runasnonroot
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              # Acotada a sa-p5, mismo motivo que restrict-image-registries.
+              namespaces:
+                - sa-p5
+      # Mismo motivo de exclusión que restrict-image-registries: son
+      # imágenes de terceros, pero solo estos Pods exactos quedan fuera.
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - sa-p5
+              names:
+                - sa-platform-nats-0
+                - sa-platform-mysql-0
+                - sa-platform-mongodb-0
+      validate:
+        message: >-
+          El pod debe correr con runAsNonRoot: true (a nivel de pod o de
+          cada contenedor).
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true

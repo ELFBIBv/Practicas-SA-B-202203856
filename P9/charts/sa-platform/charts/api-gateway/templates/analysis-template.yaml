@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "api-gateway.fullname" . }}-health
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  args:
+    - name: candidate-url
+    - name: expected-version
+  metrics:
+    - name: candidate-health
+      initialDelay: 5s
+      interval: {{ .Values.analysis.interval }}
+      count: {{ .Values.analysis.count }}
+      failureLimit: 0
+      consecutiveErrorLimit: 0
+      successCondition: >-
+        result.status == "ok" &&
+        result.version == "{{ `{{ args.expected-version }}` }}"
+      provider:
+        web:
+          url: "{{ `{{ args.candidate-url }}` }}/health"
+          timeoutSeconds: 5
+          headers:
+            - key: Connection
+              value: close

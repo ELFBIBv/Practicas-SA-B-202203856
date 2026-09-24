@@ -1,0 +1,204 @@
+global:
+  environment: prod
+  storageClass: "managed-csi"
+  imagePullSecrets:
+    - name: ghcr-secret
+  logLevel: info
+  # En AKS estos Secrets los administra Sealed Secrets; Helm solo los
+  # consume. Esto evita que Argo CD regenere contraseñas en cada render.
+  mysqlSecretName: sa-platform-mysql
+  mongodbSecretName: sa-platform-mongodb
+  natsAuthSecretName: sa-platform-nats-auth
+  # En azure ese secreto ya lo gestiona un SealedSecret (ver
+  # CAMBIOS-GITOPS.md, Fase 10) — si el chart también intenta crearlo
+  # (nats-secret.yaml), quedan dos dueños distintos para el mismo objeto.
+  # false acá deja al SealedSecret como única fuente de verdad; en kind
+  # (values-kind.yaml, que no sobreescribe esto) sigue en true porque ahí
+  # no hay Sealed Secrets — el chart se autogestiona el secreto entero.
+  natsAuthSecretCreate: false
+
+sealedSecrets:
+  enabled: true
+
+mysql:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 2Gi
+  auth:
+    database: "sa_p5"
+    username: "user"
+    existingSecret: sa-platform-mysql
+
+mongodb:
+  enabled: true
+  auth:
+    database: "catalog_db"
+    username: "root"
+    existingSecret: sa-platform-mongodb
+  persistence:
+    enabled: true
+    size: 2Gi
+
+nats:
+  enabled: true
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          enabled: true
+          size: 2Gi
+          storageClassName: "managed-csi"
+    merge:
+      authorization:
+        token: << $NATS_TOKEN >>
+  container:
+    env:
+      NATS_TOKEN:
+        valueFrom:
+          secretKeyRef:
+            name: sa-platform-nats-auth
+            key: token
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  reloader:
+    merge:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+  natsBox:
+    enabled: false
+
+api-gateway:
+  # Cinco réplicas permiten representar exactamente el primer peso de 20 %.
+  replicaCount: 5
+  image:
+    repository: ghcr.io/elfbibv/sa-api-gateway
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 80
+  ingress:
+    enabled: false
+  rollout:
+    pauseDuration: 30s
+  analysis:
+    interval: 10s
+    count: 3
+  autoscaling:
+    minReplicas: 5
+    maxReplicas: 10
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+auth:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-auth-service
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    nodeEnv: production
+    databaseUser: user
+    databaseName: auth_db
+  secrets:
+    existingSecret: sa-platform-auth-secrets
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+catalog:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-catalog-service
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+orders:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-order-service
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  config:
+    databaseUser: user
+    databaseName: orders_db
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+notifications:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/elfbibv/sa-notification-service
+    tag: "v8.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+cronjobs:
+  schedule1: "*/2 * * * *"
+  schedule2: "*/10 * * * *"
+  cron1:
+    image:
+      repository: ghcr.io/elfbibv/sa-cron1
+      tag: "v8.0.0"
+      pullPolicy: IfNotPresent
+  cron2:
+    image:
+      repository: ghcr.io/elfbibv/sa-cron2
+      tag: "v8.0.0"
+      pullPolicy: IfNotPresent
+
+# Calculado contra la capacidad real del clúster de 2 nodos
+# Standard_DS2_v2 (~3.9 vCPU / ~10Gi asignables tras las reservas de AKS,
+# ver P8/terraform/README.md) y por debajo del techo de plataforma que
+# administra Terraform (P8/terraform/variables.tf: platform_quota), para
+# que el diseño de dos capas se cumpla: plataforma > app > uso real. El
+# consumo real de todos los servicios juntos ronda ~1.2-1.7 vCPU y
+# ~1.5-2.1Gi (sumando réplicas, con margen para el pico transitorio del
+# canary), muy por debajo de este techo.
+quota:
+  requestsCpu: "2"
+  requestsMemory: 5Gi
+  # El uso agregado de limits ronda 2950m. 3150m permite el maxSurge
+  # más grande (200m) y sigue por debajo del techo Terraform de 3200m.
+  limitsCpu: "3150m"
+  limitsMemory: 7Gi

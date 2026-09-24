@@ -1,0 +1,58 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    # La verificación se hace cuando se crea el Pod real. Evitar el autogen
+    # para Deployment/StatefulSet/Job/CronJob impide que Kyverno intente
+    # resolver la imagen privada desde la plantilla del controlador, donde
+    # no reutiliza de forma fiable los imagePullSecrets del Pod. No reduce
+    # la protección: ningún contenedor puede ejecutarse sin crear antes un
+    # Pod que pase esta misma regla en modo Enforce.
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Verificar firma Cosign de la imagen
+    policies.kyverno.io/category: Cadena de suministro (sa-platform)
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Rechaza cualquier imagen de ghcr.io/elfbibv/* que no esté firmada por
+      el propio pipeline de CI (firma "keyless" de Cosign vía OIDC de
+      GitHub Actions, ver el job build-and-push de ci-cd.yml). Cierra el
+      círculo entre "se escaneó y se firmó en el pipeline" y "el clúster
+      exige esa firma antes de correr nada".
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              # Acotada a sa-p5, mismo motivo que restrict-image-registries.
+              namespaces:
+                - sa-p5
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/elfbibv/*"
+          # Evita depender exclusivamente de --imagePullSecrets del
+          # admission controller. Este Secret existe en el namespace de
+          # Kyverno y contiene las mismas credenciales que el de sa-p5.
+          imageRegistryCredentials:
+            secrets:
+              - ghcr-secret
+          attestors:
+            - entries:
+                - keyless:
+                    # Solo main: promote-to-gitops (ver ci-cd.yml) ya exige
+                    # github.ref == 'refs/heads/main' para poder proponer
+                    # un despliegue, así que cualquier imagen que de verdad
+                    # llegue a producción fue construida y firmada desde
+                    # main — aceptar refs/heads/* además era innecesario y
+                    # dejaba que una firma generada desde cualquier otra
+                    # rama pasara la verificación igual.
+                    subject: "https://github.com/ELFBIBv/Practicas-SA-B-202203856/.github/workflows/ci-cd.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev

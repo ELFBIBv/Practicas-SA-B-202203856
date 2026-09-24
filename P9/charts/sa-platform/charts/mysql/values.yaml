@@ -1,0 +1,21 @@
+image:
+  repository: mysql
+  pullPolicy: IfNotPresent
+  tag: "8.0"
+
+auth:
+  username: user
+  database: sa_p5
+  existingSecret: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+persistence:
+  enabled: true
+  size: 2Gi

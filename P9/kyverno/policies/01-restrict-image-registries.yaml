@@ -1,0 +1,54 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    # La decisión final se toma sobre el Pod que realmente ejecutará la
+    # imagen. Así las excepciones de infraestructura pueden usar nombres de
+    # Pod exactos y no selectores de etiquetas fáciles de falsificar.
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: Restringir registries de imágenes permitidos
+    policies.kyverno.io/category: Cadena de suministro (sa-platform)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Solo se permiten imágenes publicadas por el propio pipeline de CI en
+      ghcr.io/elfbibv/*. Rechaza cualquier imagen de Docker Hub, de otro
+      registry o de otro owner de GHCR (evita que alguien despliegue algo
+      que nunca pasó por el escaneo de Trivy ni por la firma de Cosign).
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              # Acotada a sa-p5: sin esto, la política aplica a TODO el
+              # clúster (kube-system, argocd, kyverno, sealed-secrets...) y
+              # puede bloquear reinicios o actualizaciones de componentes
+              # de plataforma que nunca pasaron por ghcr.io/elfbibv.
+              namespaces:
+                - sa-p5
+      # NATS/MySQL/MongoDB son subcharts de terceros. Se excluyen sus tres
+      # Pods conocidos por nombre exacto; una etiqueta como app=mysql no es
+      # suficiente para evadir la política. Ver CAMBIOS-GITOPS.md, Fase 13.
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - sa-p5
+              names:
+                - sa-platform-nats-0
+                - sa-platform-mysql-0
+                - sa-platform-mongodb-0
+      validate:
+        message: >-
+          Solo se permiten imágenes de ghcr.io/elfbibv/* (política de la
+          cadena de suministro de sa-platform).
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "ghcr.io/elfbibv/*"
