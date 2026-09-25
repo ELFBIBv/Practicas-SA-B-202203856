@@ -1,0 +1,39 @@
+# Copie este archivo a terraform.tfvars (ignorado por git, ver P9/terraform/.gitignore)
+# SOLO si necesita valores distintos a los defaults del código. bootstrap.sh no
+# usa terraform.tfvars: exporta resource_group_name/cluster_name como TF_VAR_*
+# desde P9/scripts/lib/p9-config.sh (misma fuente que 01-cluster). Ningún
+# valor de aquí es secreto: el repositorio GitOps es público y ArgoCD se
+# instala sin credenciales propias.
+
+# Deben ser IDÉNTICOS a los de 01-cluster/terraform.tfvars.example: es el
+# mismo clúster visto desde dos estados de Terraform distintos.
+resource_group_name = "rg-p9-aks"
+cluster_name        = "aks-sa-p9"
+
+# Namespace de sa-platform, heredado de P8. Con scope strict en los
+# SealedSecret, este nombre NO se puede cambiar sin volver a sellar todo
+# (ver P9/docs/diseno-secretos-dr.md §6.1 / decisiones-pendientes.md §4.1).
+app_namespace = "sa-p5"
+
+argocd_namespace = "argocd"
+
+# argo-cd 10.9.2 = ArgoCD v3.5.3. Consulte
+# https://artifacthub.io/packages/helm/argo/argo-cd para versiones nuevas;
+# si sube de versión, revise P9/docs/diseno-sync-waves.md (los Lua de health
+# de P9/terraform/modules/argocd/health/*.lua backportean comportamiento de
+# v3.6 que podría venir integrado en versiones más nuevas).
+argocd_chart_version = "10.9.2"
+
+argocd_apps_chart_version = "2.0.5"
+
+# Repositorio GitOps público que ArgoCD sincroniza. Prerrequisito externo que
+# debe sobrevivir al desastre (rúbrica 2.1). Publicado con
+# P9/scripts/publish-gitops.sh.
+gitops_repo_url        = "https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git"
+gitops_target_revision = "main"
+
+# Carpeta del repo GitOps con las Applications hijas (fuente en este repo de
+# código: P9/gitops/apps/).
+gitops_apps_path = "apps"
+
+root_app_name = "p9-root"
