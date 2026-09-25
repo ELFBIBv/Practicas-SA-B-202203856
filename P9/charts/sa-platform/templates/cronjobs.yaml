@@ -4,6 +4,11 @@ metadata:
   name: {{ include "sa-platform.fullname" . }}-cron1
   labels:
     {{- include "sa-platform.labels" . | nindent 4 }}
+  annotations:
+    # Ola 1: no por health (un CronJob sin corridas previas ya es Healthy),
+    # sino para que cron1 (*/2) no genere Jobs fallidos mientras MySQL arranca
+    # y ensucie la evidencia de restauración (P9/docs/diseno-sync-waves.md §1.2).
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   schedule: {{ .Values.cronjobs.schedule1 | quote }}
   concurrencyPolicy: Forbid
@@ -56,6 +61,8 @@ metadata:
   name: {{ include "sa-platform.fullname" . }}-cron2
   labels:
     {{- include "sa-platform.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   schedule: {{ .Values.cronjobs.schedule2 | quote }}
   concurrencyPolicy: Forbid

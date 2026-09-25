@@ -1,0 +1,29 @@
+# Ola -10: restaura los PVC de MySQL y MongoDB ANTES de que exista sa-platform (ola 0).
+# Si sa-platform llegara primero, crearía PVC vacíos y Velero los omitiría por existir.
+# Fuente: P9/docs/diseno-sync-waves.md §2.3.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: data-restore
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+    targetRevision: main
+    path: platform/data-restore
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

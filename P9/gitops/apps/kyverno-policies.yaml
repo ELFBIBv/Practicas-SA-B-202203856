@@ -1,0 +1,34 @@
+# Wave -5: las 3 políticas de P8 en Enforce, antes de que sa-platform cree Pods.
+# Fuente en el repo de código: P9/kyverno/policies (la publica publish-gitops.sh).
+# [PUNTO DE INTEGRACIÓN CON SECRETOS] verify-image-signatures lee el Secret
+# ghcr-secret del namespace kyverno (imageRegistryCredentials). Sin él, la
+# política falla cerrada y rechaza los Pods de sa-p5. Lo entrega la app
+# platform-secrets (wave -10) del diseño de secretos (P9/docs/diseño-secretos-dr.md).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+    targetRevision: main
+    path: policies/kyverno
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 1m

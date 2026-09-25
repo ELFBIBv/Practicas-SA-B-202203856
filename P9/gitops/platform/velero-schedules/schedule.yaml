@@ -1,0 +1,31 @@
+# Decisión confirmada (P9/docs/diseno-velero.md §4): cron cada 15 min, ttl 30
+# días. cron1 escribe en cron_logs cada 2 min (P9/cronjobs/cron1), así que el
+# RPO real medido depende de qué tan cerca del tick de 15 min ocurra el
+# desastre (peor caso teórico: 15 min; ver P9/docs/diseno-velero.md §7 para el
+# cálculo exacto de RPO tras una prueba real).
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: sa-p9-schedule
+  namespace: velero
+spec:
+  schedule: "*/15 * * * *"
+  template:
+    ttl: 720h0m0s
+    includedNamespaces:
+      - sa-p5
+    # Frontera con secretos (P9/docs/diseno-secretos-dr.md §3.6): un Secret
+    # restaurado por Velero choca con su SealedSecret (ErrUpdateFailed). Los
+    # secretos siempre vienen de Git, nunca de un backup. kube-system (donde
+    # vive la llave del controlador) queda fuera porque solo se incluye sa-p5.
+    excludedResources:
+      - secrets
+      - sealedsecrets.bitnami.com
+    # snapshotMoveData: true mueve los snapshots CSI a Blob Storage
+    # (configuration.volumeSnapshotLocation en module.velero), fuera del
+    # resource group de nodos MC_* que se borra con el clúster.
+    snapshotMoveData: true
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    defaultVolumesToFsBackup: false

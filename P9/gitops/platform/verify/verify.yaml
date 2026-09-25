@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: p9-platform-verify
+  namespace: sa-p5
+data:
+  smoke.sh: |
+    #!/bin/sh
+    # Humo desde DENTRO del clúster, por la misma ruta que un cliente.
+    set -eu
+    BASE="http://sa-platform-api-gateway.sa-p5.svc.cluster.local"
+    for path in /ready /api/auth/health /api/catalog/health /api/orders/health; do
+      n=0
+      until wget -q -T 5 -O /dev/null "$BASE$path"; do
+        n=$((n + 1))
+        if [ "$n" -ge 24 ]; then echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) FALLA $path"; exit 1; fi
+        sleep 5
+      done
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) OK $path"
+    done
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) VERIFY_OK"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p9-platform-verify
+  namespace: sa-p5
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      imagePullSecrets: [{name: ghcr-secret}]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: smoke
+          # Imagen del propio CI (nginx alpine: sh + wget de busybox). Pasa por las
+          # 3 políticas de Kyverno: sirve también como prueba de que ghcr-secret y la
+          # verificación de firma funcionan después de la reconstrucción.
+          image: ghcr.io/elfbibv/sa-api-gateway:v8.0.0
+          command: ["sh", "/scripts/smoke.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts, readOnly: true}
+      volumes:
+        - name: scripts
+          configMap: {name: p9-platform-verify}

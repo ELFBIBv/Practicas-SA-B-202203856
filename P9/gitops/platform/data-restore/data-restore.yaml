@@ -1,0 +1,270 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: p9-data-restore
+  namespace: velero
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: p9-data-restore
+  namespace: velero
+rules:
+  - apiGroups: ["velero.io"]
+    resources: ["backups", "backupstoragelocations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["velero.io"]
+    resources: ["restores"]
+    verbs: ["get", "list", "watch", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: p9-data-restore
+  namespace: velero
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: p9-data-restore}
+subjects: [{kind: ServiceAccount, name: p9-data-restore, namespace: velero}]
+---
+# Solo lectura de PVC en sa-p5: decidir si hay algo que restaurar.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: p9-data-restore-pvc
+  namespace: sa-p5
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: p9-data-restore-pvc
+  namespace: sa-p5
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: p9-data-restore-pvc}
+subjects: [{kind: ServiceAccount, name: p9-data-restore, namespace: velero}]
+---
+# Solo kube-system: su creationTimestamp es el "nacimiento" de este clúster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: p9-data-restore-cluster-birth
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["kube-system"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: p9-data-restore-cluster-birth
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: p9-data-restore-cluster-birth}
+subjects: [{kind: ServiceAccount, name: p9-data-restore, namespace: velero}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: p9-data-restore-config
+  namespace: velero
+data:
+  APP_NAMESPACE: sa-p5
+  VELERO_NAMESPACE: velero
+  BSL_NAME: default
+  # Debe coincidir con metadata.name del Schedule de velero-schedules.
+  SCHEDULE_NAME: sa-p9-schedule
+  # Nombres que produce el chart con releaseName sa-platform (apps/sa-platform.yaml).
+  PVCS: "sa-platform-mysql-data sa-platform-mongodb-data"
+  # Decisión 2.8 (P9/docs/decisiones-pendientes.md): arranca en skip-if-empty
+  # porque todavía no existe ningún backup real de p9-sa-p5-db (génesis P0,
+  # P9/docs/diseno-sync-waves.md §5). Cambiar a "required" es OBLIGATORIO
+  # antes de la prueba de DR cronometrada (T0), y debe hacerse en un commit
+  # fechado a este mismo archivo en el repo GitOps público, nunca a mano en
+  # el clúster: edite este valor a `RESTORE_MODE: required`, confirme con
+  # `velero backup get` que existe al menos un backup Completed de
+  # p9-sa-p5-db anterior al commit, y publíquelo con
+  # P9/scripts/publish-gitops.sh + PR. Mientras quede en skip-if-empty, una
+  # BSL mal configurada parece "sin respaldos" y el bootstrap sigue con
+  # volúmenes nuevos SIN avisar (rúbrica 2.6 no se cumple con ese valor).
+  RESTORE_MODE: skip-if-empty
+  BSL_TIMEOUT_S: "900"
+  RESTORE_TIMEOUT_S: "2700"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: p9-data-restore-script
+  namespace: velero
+data:
+  data-restore.sh: |
+    #!/usr/bin/env bash
+    # Restaura los PVC de las bases desde el último respaldo Completed tomado ANTES
+    # de que existiera este clúster. Idempotente. El log solo contiene nombres,
+    # fases y marcas de tiempo UTC: es evidencia de RTO/RPO.
+    set -Eeuo pipefail
+    log() { printf '%s [data-restore] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+    die() { log "ERROR: $*"; exit 1; }
+    trap 'die "falló la línea $LINENO: $BASH_COMMAND"' ERR
+    V=$VELERO_NAMESPACE
+    SEL=p9.dr/managed-by=data-restore
+    TERMINAL_KO='^(Failed|PartiallyFailed|FailedValidation|WaitingForPluginOperationsPartiallyFailed|FinalizingPartiallyFailed)$'
+
+    latest_restore() {  # "<nombre> <fase>" de la última restauración de este Job, o vacío
+      kubectl -n "$V" get restores -l "$SEL" --sort-by=.metadata.creationTimestamp \
+        -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase}{"\n"}{end}' | tail -n1
+    }
+
+    wait_restore() {  # 0 solo si termina Completed
+      local name=$1 phase last="" deadline=$((SECONDS + RESTORE_TIMEOUT_S))
+      while :; do
+        phase=$(kubectl -n "$V" get restore "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        if [[ "$phase" != "$last" ]]; then log "restore $name: ${phase:-sin fase}"; last=$phase; fi
+        [[ "$phase" == Completed ]] && return 0
+        if [[ "$phase" =~ $TERMINAL_KO ]]; then
+          kubectl -n "$V" get restore "$name" \
+            -o jsonpath='{"razon="}{.status.failureReason}{" errores="}{.status.errors}{" advertencias="}{.status.warnings}{"\n"}' || true
+          return 1
+        fi
+        (( SECONDS < deadline )) || { log "timeout de ${RESTORE_TIMEOUT_S}s esperando $name"; return 1; }
+        sleep 10
+      done
+    }
+
+    report() {  # línea única para la evidencia
+      local r=$1
+      kubectl -n "$V" get restore "$r" -o jsonpath='{"RESTORE_OK restore="}{.metadata.name}{" backup="}{.spec.backupName}{" restore_inicio="}{.status.startTimestamp}{" restore_fin="}{.status.completionTimestamp}{" items="}{.status.progress.itemsRestored}{" advertencias="}{.status.warnings}{"\n"}'
+      kubectl -n "$APP_NAMESPACE" get pvc -l velero.io/restore-name="$r" \
+        -o jsonpath='{range .items[*]}{"PVC "}{.metadata.name}{" fase="}{.status.phase}{"\n"}{end}'
+    }
+
+    # 0) Una restauración previa de este Job sin terminar: se retoma, no se duplica.
+    #    Fase vacía = recién creada, Velero aún no la tomó: también se retoma.
+    read -r last_name last_phase <<<"$(latest_restore)"
+    if [[ -n "${last_name:-}" && ( -z "${last_phase:-}" || "$last_phase" =~ ^(New|InProgress|WaitingForPluginOperations|Finalizing)$ ) ]]; then
+      log "retomando $last_name (${last_phase:-sin fase})"
+      wait_restore "$last_name" || die "la restauración $last_name no terminó en Completed"
+      report "$last_name"; exit 0
+    fi
+
+    # 1) Idempotencia: ¿falta algún PVC?
+    missing=()
+    for pvc in $PVCS; do
+      kubectl -n "$APP_NAMESPACE" get pvc "$pvc" -o name >/dev/null 2>&1 || missing+=("$pvc")
+    done
+    if (( ${#missing[@]} == 0 )); then
+      if [[ -n "${last_name:-}" && "${last_phase:-}" != Completed ]]; then
+        die "PVC presentes pero la última restauración ($last_name) terminó en $last_phase: posible volumen parcial. Contingencia R3 (docs/diseno-sync-waves.md §6.4)."
+      fi
+      log "IDEMPOTENTE: PVC presentes ($PVCS). No se restaura (clúster vivo o segunda corrida)."
+      exit 0
+    fi
+    [[ -z "${last_name:-}" ]] || die "faltan PVC (${missing[*]}) y ya hubo una restauración en este clúster ($last_name $last_phase). No se repite sola: contingencia R3 (docs/diseno-sync-waves.md §6.4)."
+    log "PVC ausentes: ${missing[*]}"
+
+    # 2) BSL disponible y con la lista de backups ya sincronizada desde el bucket (H12).
+    deadline=$((SECONDS + BSL_TIMEOUT_S)); last=""
+    while :; do
+      state=$(kubectl -n "$V" get backupstoragelocation "$BSL_NAME" \
+        -o jsonpath='{.status.phase}/{.status.lastSyncedTime}' 2>/dev/null || true)
+      if [[ "$state" != "$last" ]]; then log "BSL $BSL_NAME: ${state:-sin estado}"; last=$state; fi
+      [[ "$state" == Available/?* ]] && break
+      (( SECONDS < deadline )) || die "la BSL $BSL_NAME no quedó Available y sincronizada en ${BSL_TIMEOUT_S}s"
+      sleep 10
+    done
+
+    # 3) Último backup Completed de la schedule tomado ANTES del nacimiento del clúster.
+    #    Así ningún backup del propio bootstrap (namespace aún vacío) puede ser el elegido.
+    born=$(kubectl get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}')
+    backup=$(kubectl -n "$V" get backups -l velero.io/schedule-name="$SCHEDULE_NAME" -o json \
+      | jq -r --arg born "$born" '[.items[]
+          | select(.status.phase == "Completed" and .status.startTimestamp != null and .status.startTimestamp < $born)]
+          | sort_by(.status.startTimestamp) | last | .metadata.name // empty')
+    if [[ -z "$backup" ]]; then
+      case "$RESTORE_MODE" in
+        skip-if-empty) log "GENESIS: no hay respaldos de $SCHEDULE_NAME anteriores a $born; se continúa con volúmenes nuevos (RESTORE_MODE=skip-if-empty)."; exit 0 ;;
+        required) die "no hay respaldo Completed de $SCHEDULE_NAME anterior a $born. RESTORE_MODE=required: no se levantan bases vacías." ;;
+        *) die "RESTORE_MODE inválido: $RESTORE_MODE" ;;
+      esac
+    fi
+    kubectl -n "$V" get backup "$backup" \
+      -o jsonpath='{"RESPALDO_ELEGIDO="}{.metadata.name}{" inicio="}{.status.startTimestamp}{" fin="}{.status.completionTimestamp}{" expira="}{.status.expiration}{" nacimiento_cluster="}'
+    echo "$born"
+
+    # 4) Restore limitado a PVC/PV de las bases: nunca restaura Secrets, SealedSecrets
+    #    ni workloads (esos vienen de Git; restaurarlos crea dos dueños).
+    name="p9-dr-$(date -u +%Y%m%d%H%M%S)"
+    kubectl create -f - <<EOF
+    apiVersion: velero.io/v1
+    kind: Restore
+    metadata:
+      name: $name
+      namespace: $V
+      labels:
+        p9.dr/managed-by: data-restore
+    spec:
+      backupName: $backup
+      includedNamespaces: ["$APP_NAMESPACE"]
+      includedResources: ["persistentvolumeclaims", "persistentvolumes"]
+      orLabelSelectors:
+        - matchLabels: {app: mysql}
+        - matchLabels: {app: mongodb}
+      restorePVs: true
+      existingResourcePolicy: none
+    EOF
+    wait_restore "$name" || die "la restauración $name no terminó en Completed"
+
+    # 5) Cada PVC que faltaba existe ahora y lo creó ESTE restore.
+    for pvc in "${missing[@]}"; do
+      got=$(kubectl -n "$APP_NAMESPACE" get pvc "$pvc" -o jsonpath='{.metadata.labels.velero\.io/restore-name}' 2>/dev/null || true)
+      [[ "$got" == "$name" ]] || die "el PVC $pvc no proviene de $name (etiqueta: '${got:-ausente}')"
+    done
+    report "$name"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p9-data-restore
+  namespace: velero
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"                      # después del RBAC y los ConfigMaps (ola 0)
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation   # conserva el Job y su log como evidencia
+spec:
+  backoffLimit: 0                # los reintentos los hace ArgoCD (Job nuevo, log limpio)
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p9-data-restore
+    spec:
+      serviceAccountName: p9-data-restore
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: restore
+          # bash + kubectl + jq. Namespace velero: fuera del alcance de Kyverno (políticas acotadas a sa-p5).
+          image: docker.io/alpine/k8s:1.36.4@sha256:6473c1ce0ef6b2b95b6efaa2769734f2eff00d0387945b1bfb2af9ac07af0ad4
+          command: ["bash", "/scripts/data-restore.sh"]
+          envFrom:
+            - configMapRef: {name: p9-data-restore-config}
+          env:
+            - {name: HOME, value: /tmp}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+          volumeMounts:
+            - {name: script, mountPath: /scripts, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: script
+          configMap: {name: p9-data-restore-script}
+        - name: tmp
+          emptyDir: {}

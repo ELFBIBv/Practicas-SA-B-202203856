@@ -5,6 +5,8 @@ metadata:
   name: {{ include "api-gateway.fullname" . }}
   labels:
     {{- include "api-gateway.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   scaleTargetRef:
     apiVersion: argoproj.io/v1alpha1

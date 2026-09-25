@@ -4,6 +4,10 @@ metadata:
   name: {{ include "auth.fullname" . }}
   labels:
     {{- include "auth.labels" . | nindent 4 }}
+  annotations:
+    # Ola 1: después de MySQL/MongoDB/NATS (ola 0). Si arrancara antes,
+    # entraría en CrashLoopBackOff al no encontrar la base (P9/docs/diseno-sync-waves.md §1.2).
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}

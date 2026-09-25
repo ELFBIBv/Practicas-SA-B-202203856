@@ -1,0 +1,29 @@
+# Ola 10: humo funcional dentro de sa-p5, después de todo lo demás. Sin esta
+# ola, que la raíz esté Healthy solo significa "Pods listos", no "la API responde".
+# Fuente: P9/docs/diseno-sync-waves.md §2.5, §1.1.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-verify
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+    targetRevision: main
+    path: platform/verify
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sa-p5
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 2m

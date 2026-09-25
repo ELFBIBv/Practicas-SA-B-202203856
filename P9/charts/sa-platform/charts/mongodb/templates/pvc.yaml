@@ -5,6 +5,9 @@ metadata:
   name: "{{ include "mongodb.fullname" . }}-data"
   labels:
     app: mongodb
+  annotations:
+    # Ver P9/charts/sa-platform/charts/mysql/templates/pvc.yaml para el motivo.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes:
     - ReadWriteOnce

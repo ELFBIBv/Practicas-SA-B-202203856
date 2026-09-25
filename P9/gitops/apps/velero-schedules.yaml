@@ -1,0 +1,38 @@
+# Ola 5: el Schedule de respaldo, DESPUÉS de que sa-platform (ola 0) ya creó
+# las bases. Si el Schedule existiera desde el arranque del operador, un tick
+# del cron durante el bootstrap podría respaldar el namespace todavía vacío
+# (H11, P9/docs/diseno-sync-waves.md §0.8).
+# El operador de Velero (Deployment, DaemonSet node-agent, CRDs, BSL, VSL) NO
+# es una Application: lo instala Terraform en 02-platform (module.velero),
+# porque necesita Workload Identity ya federada antes de que el Pod arranque.
+# Esta Application SOLO crea el objeto Schedule, sobre un operador que ya
+# existe cuando la raíz llega a la ola 5. Ver P9/docs/diseno-velero.md §1.
+# El health de velero.io/Schedule no viene integrado en ArgoCD v3.5.3: lo da
+# el Lua de P9/terraform/modules/argocd/health/schedule.lua.
+# Fuente: P9/docs/diseno-sync-waves.md §2.5, P9/docs/diseno-velero.md §4.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-schedules
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+    targetRevision: main
+    path: platform/velero-schedules
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 1m
