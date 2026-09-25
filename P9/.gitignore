@@ -10,3 +10,43 @@ charts/sa-platform/charts/redis/
 # del README, no solo el script.
 loadtest/reporte-*.json
 !loadtest/reporte-referencia.json
+
+# --- Terraform (defensa en profundidad; P9/terraform/.gitignore también lo cubre)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+*.tfplan
+tfplan
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+
+# --- Credenciales y material de acceso al clúster
+*.kubeconfig
+kubeconfig
+kubeconfig.yaml
+*.pem
+*.key
+*.pfx
+.env
+sealed-secrets-key*
+*keyring*
+
+# El certificado de sellado es PÚBLICO (sirve para sellar sin conexión al
+# clúster y como huella esperada en el bootstrap): sí se versiona.
+# P9/docs/diseno-secretos-dr.md §3.1, §5 (V-A6).
+!gitops/sealed-secrets/pub-cert.pem
+
+# --- Logs crudos del bootstrap: se revisan/redactan antes de copiarlos a
+# evidencia/bootstrap/ y versionarlos.
+evidencia/bootstrap/raw/

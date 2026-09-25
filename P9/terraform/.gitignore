@@ -1,11 +1,35 @@
+# Directorio local de providers/módulos y copia en caché de la config del backend.
 .terraform/
+
+# Estado: vive SOLO en el backend remoto (Azure Storage). Nunca local ni en git.
 *.tfstate
 *.tfstate.*
+.terraform.tfstate.lock.info
+
+# Planes guardados: pueden contener valores sensibles en claro.
+*.tfplan
+tfplan
+tfplan.*
+
+# Variables reales. Solo se versionan ejemplos con placeholders no secretos.
 terraform.tfvars
-crash.log
-crash.*.log
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+!*.tfvars.example
+
+# Overrides locales.
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-tfplan
+
+# Configuración de la CLI (puede tener tokens de registros).
+.terraformrc
+terraform.rc
+
+# Crash logs (pueden volcar estado y variables).
+crash.log
+crash.*.log
+
+# .terraform.lock.hcl SÍ se versiona: fija versiones y hashes de providers.
