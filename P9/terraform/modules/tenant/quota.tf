@@ -1,7 +1,7 @@
-resource "kubernetes_resource_quota" "platform" {
+resource "kubernetes_resource_quota_v1" "platform" {
   metadata {
     name      = "${var.namespace}-platform-quota"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   spec {
@@ -17,10 +17,10 @@ resource "kubernetes_resource_quota" "platform" {
   }
 }
 
-resource "kubernetes_limit_range" "platform" {
+resource "kubernetes_limit_range_v1" "platform" {
   metadata {
     name      = "${var.namespace}-platform-limits"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   spec {

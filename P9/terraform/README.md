@@ -1,54 +1,31 @@
-# Terraform — namespace, cuotas, límites y RBAC
+# Terraform de P9: reconstrucción de día cero
 
-Cubre exactamente el entregable de la sección 4 del enunciado: *"Código Terraform: Namespaces, cuotas, límites y RBAC, con evidencia de plan y apply."* No crea el clúster de AKS (eso sigue siendo `az aks create`, documentado en `P8/README.md`) — administra objetos **dentro** de un clúster que ya existe.
+Hay dos etapas, cada una con su propio estado remoto en Azure Storage con bloqueo:
 
-## Qué administra
-
-| Archivo | Recurso | Para qué |
+| Etapa | Estado | Crea |
 | --- | --- | --- |
-| `namespace.tf` | `kubernetes_namespace.sa_platform` | El namespace `sa-p5` que usan el chart de Helm y la Application de ArgoCD. |
-| `quota.tf` | `kubernetes_resource_quota.platform` | Cuota de **plataforma** (tenant): el techo del namespace. |
-| `quota.tf` | `kubernetes_limit_range.platform` | Piso de seguridad de CPU/memoria por contenedor, a nivel de plataforma. |
-| `rbac.tf` | `sa-platform-viewer` (ServiceAccount + Role + RoleBinding) | Acceso de solo lectura (`get/list/watch`) sobre pods, deployments, Rollouts, CronJobs. |
-| `rbac.tf` | `sa-platform-operator` (ServiceAccount + Role + RoleBinding) | Lo mismo que `viewer`, más `patch` sobre `rollouts`/`rollouts/status` para poder hacer `kubectl argo rollouts promote/abort/retry` a mano. Sin acceso a Secrets, sin permiso de borrado. |
+| [`01-cluster/`](01-cluster/) | `p9/01-cluster.tfstate` | Resource group `rg-p9-aks` y AKS `aks-sa-p9` (2 × `Standard_DS2_v2`, tier Free, OIDC + Workload Identity) |
+| [`02-platform/`](02-platform/) | `p9/02-platform.tfstate` | Namespace `sa-p5` con cuotas y RBAC (módulo `tenant`, heredado de P8), ArgoCD (`argo-cd` 10.9.2) y la siembra del app-of-apps (AppProjects `p9-bootstrap`/`p9-platform` y Application raíz `argocd/p9-root`) |
 
-## Por qué hay dos ResourceQuota / LimitRange en el mismo namespace
+Módulos en [`modules/`](modules/): `cluster`, `tenant`, `argocd` y `app-of-apps-seed`.
 
-El chart de Helm (`P8/charts/sa-platform/templates/namespace-quotas.yaml`) ya declara su propia `ResourceQuota`/`LimitRange`, con los valores de `values-azure.yaml` (bloque `quota:`). Ese es el presupuesto que la propia aplicación se autoimpone. Este Terraform agrega una **segunda** cuota, de nivel de plataforma, con nombres distintos (`sa-p5-platform-quota`, `sa-p5-platform-limits`) y valores iguales o más generosos.
-
-No es redundante ni conflictivo: en Kubernetes, si un namespace tiene varias `ResourceQuota`, cada pod tiene que satisfacerlas **todas** simultáneamente. El patrón es real (equipo de plataforma fija el techo del tenant vía Terraform; el equipo de aplicación declara su propio presupuesto, más ajustado, vía Helm) y evita que Terraform y ArgoCD/Helm compitan por poseer el mismo objeto.
-
-### Los números no son arbitrarios: están acotados por la capacidad física del clúster
-
-Con el clúster de 2 nodos `Standard_DS2_v2` que crea `az aks create` en `P8/README.md`, la capacidad real asignable (descontando las reservas de sistema de AKS, antes de sumar lo que ya consumen `coredns`/`metrics-server`/CNI) es de **~3.9 vCPU y ~10Gi de memoria en total**. Por eso:
-
-- `platform_quota` (este módulo): `requests 2.5 / limits 3.2 vCPU`, `requests 6Gi / limits 8Gi` — deja margen real debajo de esa capacidad física.
-- `quota:` del chart de Helm (`values-azure.yaml`): `requests 2 / limits 3.15 vCPU`, `requests 5Gi / limits 7Gi` — deja espacio para un `maxSurge` de 200m y queda por debajo del techo de plataforma, manteniendo el orden `plataforma > app`.
-- Consumo real observado (sumando todas las réplicas, con margen para el pico transitorio del canary): ~1.2–1.7 vCPU, ~1.5–2.1Gi — bien por debajo de ambos techos.
-
-Si en algún momento se agranda el node pool, estos tres niveles se pueden recalcular con la misma lógica; no son números "redondos" elegidos al azar.
-
-## Prerequisitos
-
-- Terraform >= 1.5.
-- `kubectl` ya apuntando al clúster real: `az aks get-credentials --resource-group rg-practica8 --name aks-sa-p8 --overwrite-existing` (ver `P8/README.md`).
-- El contexto de kubectl resultante (por defecto se llama igual que el clúster, `aks-sa-p8`) coincide con `kube_context` en `terraform.tfvars`.
-
-## Cómo correrlo (evidencia de plan y apply)
+**No ejecute `terraform init/plan/apply` a mano.** El backend es parcial: `P9/scripts/bootstrap.sh` lo crea o lo reutiliza, pasa los `-backend-config` de cada etapa y exporta los `TF_VAR_*` compartidos para que las dos etapas hablen del mismo clúster. Comandos:
 
 ```bash
-cd P8/terraform
-cp terraform.tfvars.example terraform.tfvars   # ajustar si el contexto se llama distinto
-
-terraform init
-terraform plan  -out=tfplan | tee plan.log      # evidencia de "plan"
-terraform apply tfplan       | tee apply.log     # evidencia de "apply"
-
-kubectl get resourcequota,limitrange,sa,role,rolebinding -n sa-p5
+./P9/scripts/bootstrap.sh            # reconstrucción completa (make -C P9 bootstrap)
+./P9/scripts/bootstrap.sh plan       # solo planes
+./P9/scripts/destroy-cluster.sh --confirm aks-sa-p9   # IRREVERSIBLE: solo 01-cluster
+make -C P9 fmt-check validate        # validación estática sin tocar Azure
 ```
 
-Guardar `plan.log`, `apply.log` y la salida de ese último `kubectl get` (o una captura) es la evidencia que pide la tabla de entregables — referenciarlos desde la tabla de enlaces obligatoria del `P8/README.md`.
+Diseño completo en [`../docs/terraform-dia-cero.md`](../docs/terraform-dia-cero.md). El backend y el locking están en [`../docs/terraform-backend.md`](../docs/terraform-backend.md).
 
-## Nota sobre el estado (`terraform.tfstate`)
+## Cuotas en dos niveles (heredado de P8)
 
-Este módulo usa backend local (`terraform.tfstate` queda en esta carpeta, y está en `.gitignore` porque puede contener datos del clúster). Para un solo estudiante corriendo esto desde su propia laptop alcanza; si en algún momento se necesita que más de una persona lo aplique, hay que migrar a un backend remoto (Azure Storage, por ejemplo) — no es necesario para esta entrega.
+`modules/tenant` crea `sa-p5-platform-quota` y `sa-p5-platform-limits`, el techo de **plataforma**. El chart `sa-platform` declara su propia `ResourceQuota`, más ajustada (`values-azure.yaml`, bloque `quota:`). Kubernetes exige que cada Pod cumpla **todas** las cuotas del namespace, así que no hay conflicto. Además, Terraform y ArgoCD no se disputan el mismo objeto.
+
+Los valores (`requests 2.5 / limits 3.2 vCPU`, `requests 6Gi / limits 8Gi`) quedan por debajo de la capacidad asignable de 2 × `Standard_DS2_v2`: unos 3.9 vCPU y 10 Gi después de las reservas de AKS.
+
+## Evidencia
+
+Los `plan.log`, `apply.log` y `kubectl-get-evidencia.log` que había aquí eran copias idénticas de los de `P8/terraform/`, y se eliminaron de P9. El original sigue en P8. La evidencia de P9 se generará con `make -C P9 bootstrap`.

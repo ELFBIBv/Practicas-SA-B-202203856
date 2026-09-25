@@ -1,16 +1,16 @@
 # Rol de solo lectura: puede inspeccionar el estado del namespace (pods,
 # deployments, Rollouts, CronJobs) pero no puede modificar ni borrar nada.
-resource "kubernetes_service_account" "viewer" {
+resource "kubernetes_service_account_v1" "viewer" {
   metadata {
     name      = var.viewer_service_account
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 }
 
-resource "kubernetes_role" "viewer" {
+resource "kubernetes_role_v1" "viewer" {
   metadata {
     name      = "sa-platform-viewer"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   rule {
@@ -38,22 +38,22 @@ resource "kubernetes_role" "viewer" {
   }
 }
 
-resource "kubernetes_role_binding" "viewer" {
+resource "kubernetes_role_binding_v1" "viewer" {
   metadata {
     name      = "sa-platform-viewer-binding"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "Role"
-    name      = kubernetes_role.viewer.metadata[0].name
+    name      = kubernetes_role_v1.viewer.metadata[0].name
   }
 
   subject {
     kind      = "ServiceAccount"
-    name      = kubernetes_service_account.viewer.metadata[0].name
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    name      = kubernetes_service_account_v1.viewer.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 }
 
@@ -61,17 +61,17 @@ resource "kubernetes_role_binding" "viewer" {
 # Rollout (promote/abort/retry, vía "kubectl argo rollouts" o parcheando
 # rollouts/status) para contener un despliegue defectuoso a mano si hiciera
 # falta. Sigue sin acceso a Secrets ni permiso de borrado.
-resource "kubernetes_service_account" "operator" {
+resource "kubernetes_service_account_v1" "operator" {
   metadata {
     name      = var.operator_service_account
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 }
 
-resource "kubernetes_role" "operator" {
+resource "kubernetes_role_v1" "operator" {
   metadata {
     name      = "sa-platform-operator"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   rule {
@@ -99,21 +99,21 @@ resource "kubernetes_role" "operator" {
   }
 }
 
-resource "kubernetes_role_binding" "operator" {
+resource "kubernetes_role_binding_v1" "operator" {
   metadata {
     name      = "sa-platform-operator-binding"
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "Role"
-    name      = kubernetes_role.operator.metadata[0].name
+    name      = kubernetes_role_v1.operator.metadata[0].name
   }
 
   subject {
     kind      = "ServiceAccount"
-    name      = kubernetes_service_account.operator.metadata[0].name
-    namespace = kubernetes_namespace.sa_platform.metadata[0].name
+    name      = kubernetes_service_account_v1.operator.metadata[0].name
+    namespace = kubernetes_namespace_v1.sa_platform.metadata[0].name
   }
 }

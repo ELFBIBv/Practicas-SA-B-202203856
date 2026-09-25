@@ -1,15 +1,3 @@
-variable "kubeconfig_path" {
-  description = "Ruta al kubeconfig ya autenticado contra el clúster AKS (generado por 'az aks get-credentials')."
-  type        = string
-  default     = "~/.kube/config"
-}
-
-variable "kube_context" {
-  description = "Contexto de kubectl a usar. Por defecto null, que usa el contexto actualmente activo (el que deja 'az aks get-credentials --overwrite-existing')."
-  type        = string
-  default     = null
-}
-
 variable "namespace" {
   description = "Namespace de la plataforma sa-platform: el mismo que usan el chart de Helm (values-azure.yaml) y la Application de ArgoCD."
   type        = string
@@ -24,9 +12,9 @@ variable "namespace_labels" {
 
 # Cuota de nivel de PLATAFORMA (tenant): el techo dentro del cual el chart
 # de Helm declara su propia cuota, más ajustada, en
-# P8/charts/sa-platform/values-azure.yaml (bloque "quota:"). Son dos
+# P9/charts/sa-platform/values-azure.yaml (bloque "quota:"). Son dos
 # ResourceQuota distintas y coexisten sin conflicto: Kubernetes exige que
-# todo pod satisfaga ambas a la vez. Ver P8/terraform/README.md para el
+# todo pod satisfaga ambas a la vez. Ver P9/terraform/README.md para el
 # razonamiento completo.
 variable "platform_quota" {
   description = "Cuota de nivel de plataforma para el namespace."
@@ -39,11 +27,11 @@ variable "platform_quota" {
     services        = string
     pvcs            = string
   })
-  # Calculado contra la capacidad real del clúster documentado en
-  # P8/README.md (2 nodos Standard_DS2_v2): ~3.9 vCPU y ~10Gi de memoria
+  # Calculado contra la capacidad del clúster que crea
+  # P9/terraform/modules/cluster (2 nodos Standard_DS2_v2): ~3.9 vCPU y ~10Gi de memoria
   # asignables en total, después de las reservas de sistema de AKS (antes
   # de contar lo que ya consumen coredns/metrics-server/CNI). Dejar
-  # margen debajo de ese techo físico; ver P8/terraform/README.md.
+  # margen debajo de ese techo físico; ver P9/terraform/README.md.
   default = {
     requests_cpu    = "2500m"
     requests_memory = "6Gi"

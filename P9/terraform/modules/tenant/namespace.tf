@@ -1,11 +1,11 @@
-resource "kubernetes_namespace" "sa_platform" {
+resource "kubernetes_namespace_v1" "sa_platform" {
   metadata {
     name = var.namespace
 
     labels = merge(
       {
         "app.kubernetes.io/managed-by" = "terraform"
-        "practica"                     = "p8"
+        "practica"                     = "p9"
       },
       var.namespace_labels,
     )
