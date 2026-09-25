@@ -1,0 +1,38 @@
+# Copie este archivo a terraform.tfvars (ignorado por git, ver P9/terraform/.gitignore)
+# SOLO si necesita valores distintos a los defaults del código. bootstrap.sh no
+# usa terraform.tfvars para esta etapa: los defaults ya coinciden con
+# TFSTATE_RESOURCE_GROUP/TFSTATE_LOCATION de P9/scripts/lib/tfstate-backend.sh.
+# Ningún valor de aquí es secreto: el nombre de la cuenta de almacenamiento se
+# deriva de un hash de la suscripción (ver P9/docs/diseno-velero.md §2), no se
+# fija aquí.
+
+# Debe ser el MISMO resource group que TFSTATE_RESOURCE_GROUP (rg-p9-tfstate):
+# ahí es donde bootstrap.sh ya aseguró el backend de Terraform con Azure CLI
+# antes de que esta etapa corra. Este módulo solo LEE ese resource group.
+persistent_resource_group_name = "rg-p9-tfstate"
+
+# Misma región que el backend de Terraform (TFSTATE_LOCATION).
+location = "chilecentral"
+
+velero_storage_sku = "Standard_LRS"
+
+velero_container_name = "velero-backups"
+
+# Identidad administrada asignada por el usuario que usa Velero (Workload
+# Identity). Ver P9/docs/diseno-velero.md §3.
+velero_uami_name = "id-sa-p9-velero"
+
+# Días de versionado/soft-delete de la cuenta de respaldos.
+velero_storage_retention_days = 30
+
+# --- Key Vault: custodia de la llave de Sealed Secrets.
+sealed_keyring_vault_name = "kv-sa-p9-202203856"
+
+# NO son secretos: son identificadores de Entra ID (GUID), no credenciales.
+# Obténgalos con la sesión de az login que va a ejecutar el bootstrap:
+#   az ad signed-in-user show --query id -o tsv
+# En esta práctica el custodio y quien ejecuta bootstrap.sh son la misma
+# persona, así que ambos valores suelen coincidir; declárelos igual como dos
+# variables (ver P9/docs/diseno-velero.md, sección Key Vault).
+custodian_object_id = "00000000-0000-0000-0000-000000000000"
+bootstrap_object_id = "00000000-0000-0000-0000-000000000000"
