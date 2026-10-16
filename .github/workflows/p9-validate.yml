@@ -56,9 +56,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck de los scripts de P9
+        # verificar_p9.sh es el script de calificación provisto por el curso: no
+        # se modifica (el auxiliar compara su sha256 con el publicado), así que
+        # se excluye de este chequeo.
         run: |
           shellcheck --version
-          shellcheck -x -P P9/scripts P9/scripts/*.sh P9/scripts/lib/*.sh P9/scripts/tests/*.sh
+          find P9/scripts -name '*.sh' ! -name verificar_p9.sh -print0 | xargs -0 shellcheck -x -P P9/scripts
       - name: Pruebas unitarias de la lógica de DR (sin clúster)
         run: P9/scripts/tests/dr-tests-lib.test.sh
 
