@@ -27,7 +27,8 @@ source "$SCRIPT_DIR/lib/tfstate-backend.sh"
 # (blob lease) es idéntico para la key de 02-platform.
 STACK=01-cluster
 TF_DIR="$(tf_stack_dir "$STACK")"
-export TF_IN_AUTOMATION=1 TF_INPUT=0
+# CHECKPOINT_DISABLE: sin consulta de red a HashiCorp por versiones nuevas.
+export TF_IN_AUTOMATION=1 TF_INPUT=0 CHECKPOINT_DISABLE=1
 
 trap 'die "Falló la línea $LINENO: $BASH_COMMAND"' ERR
 

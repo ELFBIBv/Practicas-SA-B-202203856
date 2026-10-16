@@ -32,7 +32,7 @@ require_cmd() {
 
 # version_ge <actual> <mínima>: verdadero si actual >= mínima (orden semver).
 version_ge() {
-  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
+  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | sed -n 1p)" == "$2" ]]
 }
 
 # retry <intentos> <espera_s> <comando...>: reintenta errores transitorios

@@ -17,6 +17,16 @@ P9_MARKER_DB="${P9_MARKER_DB:-sa_p5}"
 P9_SCHEDULE="${P9_SCHEDULE:-sa-p9-schedule}"
 P9_VELERO_NS="${P9_VELERO_NS:-velero}"
 
+# redact: filtro de línea para logs versionables. Tapa los GUID en claro
+# (suscripción, tenant, client-id) y los id en base64 que imprime Terraform
+# para data.azurerm_client_config ("[id=Y2xpZW50Q29uZmln...]"), que codifican
+# esos mismos GUID y escapaban a la primera regla.
+redact() {
+  sed -u -E \
+    -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<guid-redactado>/g' \
+    -e 's/\[id=[A-Za-z0-9+\/]{40,}={0,2}\]/[id=<base64-redactado>]/g'
+}
+
 # evidence_log <subdir> <prefijo>: duplica stdout/stderr del script a
 # P9/evidencia/<subdir>/<prefijo>-<UTC>.log. El archivo se versiona como
 # evidencia, así que se redactan los GUID (suscripción, tenant, client-id de
@@ -25,7 +35,7 @@ evidence_log() {
   local dir="$P9_DIR/evidencia/$1" file
   mkdir -p "$dir"
   file="$dir/$2-$(date -u +%Y%m%dT%H%M%SZ).log"
-  exec > >(tee >(sed -u -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<guid-redactado>/g' >>"$file")) 2>&1
+  exec > >(tee >(redact >>"$file")) 2>&1
   log "Evidencia: ${file#"$REPO_ROOT"/} (zona horaria: UTC; contexto: $(kubectl config current-context 2>/dev/null || echo n/d))."
 }
 

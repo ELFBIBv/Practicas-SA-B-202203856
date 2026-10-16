@@ -89,6 +89,19 @@ else
   ko "backup_times sin salto de línea final: read devuelve 1 y aborta las pruebas de DR"
 fi
 
+# --- redact: GUID en claro y el id base64 de data.azurerm_client_config
+# (formato real de la salida de terraform plan; valores ficticios).
+cid="$(printf 'clientConfigs/clientId=11111111-2222-3333-4444-555555555555;objectId=66666666-7777-8888-9999-000000000000' | base64 -w0)"
+red="$(printf '%s\n' "data.azurerm_client_config.current: Read complete after 0s [id=$cid]" \
+  "azurerm_storage_account.velero: Refreshing state... [id=/subscriptions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/resourceGroups/rg-p9-tfstate]" | redact)"
+if grep -q "$cid" <<<"$red" || grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-' <<<"$red"; then
+  ko "redact dejó pasar un identificador: $red"
+elif grep -q 'id=<base64-redactado>' <<<"$red" && grep -q 'rg-p9-tfstate' <<<"$red"; then
+  ok "redact tapa GUID y el id base64 de Terraform sin borrar el resto de la línea"
+else
+  ko "redact cambió de más: $red"
+fi
+
 # --- Reporte del sondeo de dr-node-drain-test.sh (mismo awk que el script).
 script="$TESTS_DIR/../dr-node-drain-test.sh"
 awk_prog="$(sed -n "/^report=\"\$(awk -F, /,/}' \"\$probe_csv\")\"/p" "$script" |

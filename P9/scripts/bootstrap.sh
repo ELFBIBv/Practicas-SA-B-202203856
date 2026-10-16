@@ -30,7 +30,8 @@ TF_MIN_VERSION="1.9.0"
 # antes de fallar. Acotado a propósito: una segunda corrida debe esperar a la
 # primera o fallar con un mensaje claro, nunca pisarla.
 TF_LOCK_TIMEOUT="${TF_LOCK_TIMEOUT:-120s}"
-export TF_IN_AUTOMATION=1 TF_INPUT=0
+# CHECKPOINT_DISABLE: sin consulta de red a HashiCorp por versiones nuevas.
+export TF_IN_AUTOMATION=1 TF_INPUT=0 CHECKPOINT_DISABLE=1
 
 trap 'die "Falló la línea $LINENO: $BASH_COMMAND"' ERR
 
@@ -73,7 +74,11 @@ preflight() {
   [[ "$cmd" == all || "$cmd" == verify ]] && require_cmd kubectl curl jq yq openssl gunzip
 
   local tf_version
-  tf_version="$(terraform version | head -n1 | sed -E 's/^Terraform v//')"
+  # -json + sed -n: sed consume toda la salida. Con `| head -n1`, Terraform
+  # escribía el aviso "out of date" después de que head cerrara la tubería,
+  # recibía SIGPIPE y pipefail abortaba el bootstrap (falla intermitente).
+  tf_version="$(terraform version -json | sed -n -E 's/.*"terraform_version": *"([^"]+)".*/\1/p')"
+  [[ -n "$tf_version" ]] || die "No se pudo leer la versión de Terraform (terraform version -json)."
   version_ge "$tf_version" "$TF_MIN_VERSION" ||
     die "Terraform $tf_version < $TF_MIN_VERSION requerido."
   log "Terraform $tf_version, $(az version --query '"azure-cli"' -o tsv 2>/dev/null | sed 's/^/azure-cli /')."

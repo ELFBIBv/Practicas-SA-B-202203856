@@ -22,7 +22,8 @@ source "$SCRIPT_DIR/lib/p9-config.sh"
 # shellcheck source=lib/tfstate-backend.sh
 source "$SCRIPT_DIR/lib/tfstate-backend.sh"
 
-export TF_IN_AUTOMATION=1 TF_INPUT=0
+# CHECKPOINT_DISABLE: sin consulta de red a HashiCorp por versiones nuevas.
+export TF_IN_AUTOMATION=1 TF_INPUT=0 CHECKPOINT_DISABLE=1
 trap 'die "Falló la línea $LINENO: $BASH_COMMAND"' ERR
 
 [[ "${1:-}" == --confirm && "${2:-}" == "$P9_CLUSTER_NAME" ]] ||
