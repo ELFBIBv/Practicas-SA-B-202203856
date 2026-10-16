@@ -26,6 +26,10 @@ spec:
     # (configuration.volumeSnapshotLocation en module.velero), fuera del
     # resource group de nodos MC_* que se borra con el clúster.
     snapshotMoveData: true
+    # Explícito (es el valor efectivo de Velero): sin él el Backup guarda
+    # snapshotVolumes=null y un lector que solo mire ese campo concluye que
+    # no se respaldan volúmenes, aunque el data mover sí los respalda.
+    snapshotVolumes: true
     storageLocation: default
     volumeSnapshotLocations:
       - default

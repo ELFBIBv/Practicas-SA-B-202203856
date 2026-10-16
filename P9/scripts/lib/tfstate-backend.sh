@@ -283,16 +283,16 @@ tfstate_terraform_init() {
 # Acceso a blobs para las verificaciones de bloqueo. En modo key, la llave se
 # pasa a `az` solo como variable de entorno del proceso hijo (no aparece en
 # `ps`, a diferencia de --account-key) y nunca se imprime.
-_tfstate_access_key=""
+_tfstate_storage_key=""
 tfstate_az_blob() {
   if [[ "$TFSTATE_AUTH" == azuread ]]; then
     az storage blob "$@" --account-name "$TFSTATE_STORAGE_ACCOUNT" --auth-mode login --only-show-errors
   else
-    if [[ -z "$_tfstate_access_key" ]]; then
-      _tfstate_access_key="$(azs storage account keys list -n "$TFSTATE_STORAGE_ACCOUNT" \
+    if [[ -z "$_tfstate_storage_key" ]]; then
+      _tfstate_storage_key="$(azs storage account keys list -n "$TFSTATE_STORAGE_ACCOUNT" \
         -g "$TFSTATE_RESOURCE_GROUP" --query '[0].value' -o tsv)"
     fi
-    AZURE_STORAGE_KEY="$_tfstate_access_key" \
+    AZURE_STORAGE_KEY="$_tfstate_storage_key" \
       az storage blob "$@" --account-name "$TFSTATE_STORAGE_ACCOUNT" --auth-mode key --only-show-errors
   fi
 }
