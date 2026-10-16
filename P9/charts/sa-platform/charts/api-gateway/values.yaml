@@ -9,6 +9,7 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 80
+  annotations: {}
 ingress:
   enabled: true
 rollout:
@@ -38,3 +39,11 @@ global:
   environment: dev
   logLevel: info
   imagePullSecrets: []
+
+# Reparte réplicas entre nodos (topologySpreadConstraints + anti-afinidad
+# preferida). Ver templates: rúbrica 2.5 de P9.
+spreadAcrossNodes: true
+
+# Espera antes de detener el contenedor para que el Service deje de
+# enviarle tráfico (lifecycle.preStop.sleep). Rúbrica 2.5 de P9.
+preStopSleepSeconds: 5

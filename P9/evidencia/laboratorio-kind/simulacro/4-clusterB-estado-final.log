@@ -1,0 +1,32 @@
+# Estado del clúster B (reconstruido) consultado el 2026-10-16T18:14:58Z — laboratorio kind, NO es AKS
+## Nodos
+NODO                 CREADO
+p9-b-control-plane   2026-10-16T17:59:36Z
+p9-b-worker          2026-10-16T17:59:52Z
+p9-b-worker2         2026-10-16T17:59:52Z
+## Nacimiento del clúster (kube-system)
+2026-10-16T17:59:36Z
+## Llaves de Sealed Secrets en kube-system y huella
+SECRET                    ESTADO
+sealed-secrets-keyz5j88   active
+controlador: sha256 Fingerprint=BE:77:86:A4:AB:0F:EE:5F:87:D2:D0:84:55:83:47:06:FF:26:5B:0F:EB:1D:34:7D:4A:A2:6A:C3:FE:51:02:B3
+pub-cert del laboratorio (custodiado): sha256 Fingerprint=BE:77:86:A4:AB:0F:EE:5F:87:D2:D0:84:55:83:47:06:FF:26:5B:0F:EB:1D:34:7D:4A:A2:6A:C3:FE:51:02:B3
+## SealedSecrets (mismo ciphertext sellado en el clúster A)
+NOMBRE                SYNCED
+sa-platform-mongodb   True
+sa-platform-mysql     True
+## Restore de Velero
+RESTORE                BACKUP                          FASE        INICIO                 FIN
+p9-dr-20261016180804   sa-p9-schedule-20261016175542   Completed   2026-10-16T18:08:05Z   2026-10-16T18:09:12Z
+## PVC
+PVC                        FASE    RESTORE
+sa-platform-mongodb-data   Bound   p9-dr-20261016180804
+sa-platform-mysql-data     Bound   p9-dr-20261016180804
+## Pods
+POD                     LISTO   NODO
+sa-platform-mongodb-0   true    p9-b-worker2
+sa-platform-mysql-0     true    p9-b-worker
+## Marcadores en MySQL (sa_p5.p9_dr_marker)
+p9dr-20261016T165736Z-M1	pre-backup	2026-10-16T16:57:41.401000Z
+p9dr-20261016T174527Z-M1	pre-backup	2026-10-16T17:45:32.589000Z
+p9lab-20261016T175129Z-M1	pre-backup	2026-10-16T17:51:32.628000Z

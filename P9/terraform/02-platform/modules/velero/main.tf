@@ -72,6 +72,28 @@ resource "helm_release" "velero" {
       podLabels = {
         "azure.workload.identity/use" = "true"
       }
+      # Lee la configuración de abajo (el chart antepone "velero-" al nombre).
+      extraArgs = ["--node-agent-configmap=velero-node-agent-config"]
+    }
+
+    # managed-csi es WaitForFirstConsumer. Sin ignoreDelayBinding, el data
+    # mover espera a que un Pod consuma el PVC restaurado antes de bajar los
+    # datos; pero el Job p9-data-restore (ola -10) espera el Restore antes de
+    # que exista sa-platform (ola 0), su consumidor: abrazo mortal hasta el
+    # timeout de 30 min de Velero y el bootstrap falla. Observado en la prueba
+    # local del 2026-10-16 (Velero 1.18.2: "error to wait target PVC
+    # consumed"). Con ignoreDelayBinding el volumen se crea sin esperar al Pod;
+    # es seguro porque el node pool no es zonal (availability_zones = null en
+    # 01-cluster): un disco regional se monta en cualquier nodo. Si se activan
+    # zonas, revisar esta decisión (el disco podría quedar en otra zona).
+    configMaps = {
+      node-agent-config = {
+        data = {
+          "node-agent-config.json" = jsonencode({
+            restorePVC = { ignoreDelayBinding = true }
+          })
+        }
+      }
     }
 
     initContainers = [{
@@ -126,5 +148,28 @@ resource "helm_release" "velero" {
     # velero-schedules (ola 5). Si estuviera en esta release, un tick del
     # cron durante el propio bootstrap podría respaldar el namespace vacío.
     schedules = {}
+
+    # Velero elige la VolumeSnapshotClass por la etiqueta
+    # velero.io/csi-volumesnapshot-class, no por nombre. La que AKS crea por
+    # defecto (csi-azuredisk-vsc) no la trae: sin esta clase, el backup de los
+    # PVC de managed-csi termina PartiallyFailed ("failed to get
+    # volumesnapshotclass for provisioner disk.csi.azure.com"). Delete es
+    # suficiente: con snapshotMoveData el contenido ya se copió a Blob Storage
+    # y el snapshot local es efímero (P9/docs/diseno-velero.md §1.3).
+    extraObjects = [{
+      apiVersion = "snapshot.storage.k8s.io/v1"
+      kind       = "VolumeSnapshotClass"
+      metadata = {
+        name = "p9-velero-azuredisk"
+        labels = {
+          "velero.io/csi-volumesnapshot-class" = "true"
+        }
+      }
+      driver         = "disk.csi.azure.com"
+      deletionPolicy = "Delete"
+      parameters = {
+        incremental = "true"
+      }
+    }]
   })]
 }

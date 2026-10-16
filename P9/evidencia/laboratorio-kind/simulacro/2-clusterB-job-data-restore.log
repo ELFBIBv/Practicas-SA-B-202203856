@@ -1,0 +1,10 @@
+2026-10-16T18:08:01Z [data-restore] PVC ausentes: sa-platform-mysql-data sa-platform-mongodb-data
+2026-10-16T18:08:01Z [data-restore] BSL default: Available/2026-10-16T18:07:22Z
+RESPALDO_ELEGIDO=sa-p9-schedule-20261016175542 inicio=2026-10-16T17:55:42Z fin=2026-10-16T17:57:01Z expira=2026-12-15T17:55:42Z nacimiento_cluster=2026-10-16T17:59:36Z
+restore.velero.io/p9-dr-20261016180804 created
+2026-10-16T18:08:06Z [data-restore] restore p9-dr-20261016180804: InProgress
+2026-10-16T18:08:18Z [data-restore] restore p9-dr-20261016180804: WaitingForPluginOperations
+2026-10-16T18:09:14Z [data-restore] restore p9-dr-20261016180804: Completed
+RESTORE_OK restore=p9-dr-20261016180804 backup=sa-p9-schedule-20261016175542 restore_inicio=2026-10-16T18:08:05Z restore_fin=2026-10-16T18:09:12Z items=6 advertencias=
+PVC sa-platform-mongodb-data fase=Bound
+PVC sa-platform-mysql-data fase=Bound

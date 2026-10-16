@@ -1,0 +1,20 @@
+
+2026-10-16T17:51:29Z [STAGE] ===== 1. Clúster A: marcador M1 y respaldo programado posterior =====
+2026-10-16T17:51:34Z [INFO]  M1=2026-10-16T17:51:32.628Z
+2026-10-16T17:51:34Z [INFO]  Esperando un Backup Completed de sa-p9-schedule iniciado después de 2026-10-16T17:51:32.628Z (hasta 900s; cron del Schedule: */5 * * * *).
+2026-10-16T17:51:34Z [INFO]  Backup: todavía ninguno 
+2026-10-16T17:55:48Z [INFO]  Backup: sa-p9-schedule-20261016175542 InProgress
+2026-10-16T17:56:34Z [INFO]  Backup: sa-p9-schedule-20261016175542 WaitingForPluginOperations
+2026-10-16T17:57:04Z [INFO]  Backup: sa-p9-schedule-20261016175542 Completed
+2026-10-16T17:57:05Z [INFO]  RESPALDO=sa-p9-schedule-20261016175542 inicio=2026-10-16T17:55:42Z fin=2026-10-16T17:57:01Z
+2026-10-16T17:57:09Z [INFO]  M2=2026-10-16T17:57:08.446Z
+
+2026-10-16T17:57:09Z [STAGE] ===== 2. DESASTRE: se elimina el clúster A completo =====
+2026-10-16T17:57:09Z [INFO]  DESASTRE_INICIO=2026-10-16T17:57:09Z
+Deleting cluster "p9-a" ...
+Deleted nodes: ["p9-a-worker" "p9-a-worker2" "p9-a-control-plane"]
+2026-10-16T17:57:55Z [INFO]  DESASTRE_FIN=2026-10-16T17:57:55Z (S3 externo y Key Vault simulado intactos)
+
+2026-10-16T17:57:55Z [STAGE] ===== 3. RECONSTRUCCIÓN: clúster B =====
+2026-10-16T17:57:55Z [INFO]  RECONSTRUCCION_INICIO=2026-10-16T17:57:55Z
+2026-10-16T18:01:43Z [ERROR] Falló la línea 34: "$LAB/tools/setup-base.sh" "$LAB/kc-b"

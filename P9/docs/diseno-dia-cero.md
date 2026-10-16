@@ -65,4 +65,4 @@ Todas las esperas son `kubectl wait`/`rollout status` o sondeos con límite de t
 
 **Estado de git:** `git mv`/`git rm` dejaron cambios preparados en el índice; no hice commits. Aparecieron dos archivos vacíos creados por otra sesión, `docs/diseno-dia-cero.md` y `docs/decisiones-pendientes.md`, y no los toqué.
 
-El detalle completo está en [docs/terraform-dia-cero.md](P9/docs/terraform-dia-cero.md). Lo siguiente, con tu autorización, es `./P9/scripts/bootstrap.sh plan` contra tu suscripción.
+El detalle completo está en [docs/terraform-dia-cero.md](terraform-dia-cero.md). Lo siguiente, con tu autorización, es `./P9/scripts/bootstrap.sh plan` contra tu suscripción.

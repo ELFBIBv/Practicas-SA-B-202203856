@@ -34,7 +34,7 @@ spec:
                 - sa-p5
       # NATS/MySQL/MongoDB son subcharts de terceros. Se excluyen sus tres
       # Pods conocidos por nombre exacto; una etiqueta como app=mysql no es
-      # suficiente para evadir la política. Ver CAMBIOS-GITOPS.md, Fase 13.
+      # suficiente para evadir la política. Ver P8/CAMBIOS-GITOPS.md, Fase 13.
       exclude:
         any:
           - resources:

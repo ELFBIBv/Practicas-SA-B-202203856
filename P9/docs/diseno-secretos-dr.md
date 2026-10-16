@@ -30,10 +30,10 @@ Con muchos equipos o muchos secretos, ESO sería lo correcto. Aquí no compensa.
 
 | Hallazgo | Consecuencia |
 |---|---|
-| El controlador de P8 se instaló a mano, sin versión fijada ni `keyrenewperiod` ([CAMBIOS-GITOPS.md:425](P9/CAMBIOS-GITOPS.md#L425)), así que rota la llave cada 30 días. | Todo lo que se selle después de una rotación no respaldada no se podrá descifrar tras el desastre. |
-| En Git solo hay 3 `SealedSecret` ([sealed-secrets.yaml](P9/charts/sa-platform/templates/sealed-secrets.yaml)), con scope strict en `sa-p5`. | El namespace `sa-p5` y los nombres **no se pueden renombrar** en P9 (ver §6). |
-| **Brecha:** `ghcr-secret` y `sa-platform-nats-auth` se sellaron pero no se publicaron en Git ([CAMBIOS-GITOPS.md:446](P9/CAMBIOS-GITOPS.md#L446)). Kyverno además exige `ghcr-secret` en el namespace `kyverno` ([03-verify-image-signatures.yaml:42](P9/kyverno/policies/03-verify-image-signatures.yaml#L42)). | Aunque la llave vuelva, tras reconstruir fallan el pull de GHCR, la verificación Cosign y NATS (`natsAuthSecretCreate: false`). El README heredado dice "5 SealedSecret", lo cual es cierto en el clúster pero falso en Git. |
-| Los subcharts generan contraseñas aleatorias si falta `existingSecret` ([mysql/templates/secret.yaml](P9/charts/sa-platform/charts/mysql/templates/secret.yaml)). | Este es el fallo silencioso real: un Secret con valores que no coinciden con el volumen restaurado por Velero. Ya ocurrió en P8 (Fase 13). |
+| El controlador de P8 se instaló a mano, sin versión fijada ni `keyrenewperiod` ([P8/CAMBIOS-GITOPS.md:425](../../P8/CAMBIOS-GITOPS.md#L425)), así que rota la llave cada 30 días. | Todo lo que se selle después de una rotación no respaldada no se podrá descifrar tras el desastre. |
+| En Git solo hay 3 `SealedSecret` ([sealed-secrets.yaml](../charts/sa-platform/templates/sealed-secrets.yaml)), con scope strict en `sa-p5`. | El namespace `sa-p5` y los nombres **no se pueden renombrar** en P9 (ver §6). |
+| **Brecha:** `ghcr-secret` y `sa-platform-nats-auth` se sellaron pero no se publicaron en Git ([P8/CAMBIOS-GITOPS.md:446](../../P8/CAMBIOS-GITOPS.md#L446)). Kyverno además exige `ghcr-secret` en el namespace `kyverno` ([03-verify-image-signatures.yaml:42](../kyverno/policies/03-verify-image-signatures.yaml#L42)). | Aunque la llave vuelva, tras reconstruir fallan el pull de GHCR, la verificación Cosign y NATS (`natsAuthSecretCreate: false`). El README heredado dice "5 SealedSecret", lo cual es cierto en el clúster pero falso en Git. |
+| Los subcharts generan contraseñas aleatorias si falta `existingSecret` ([mysql/templates/secret.yaml](../charts/sa-platform/charts/mysql/templates/secret.yaml)). | Este es el fallo silencioso real: un Secret con valores que no coinciden con el volumen restaurado por Velero. Ya ocurrió en P8 (Fase 13). |
 | No pude comprobar si `aks-sa-p8` sigue existiendo. El contexto de kubectl activo aquí es `bank-usac`, y en esta máquina no están `az`, `kubeseal`, `helm` ni `terraform`. | Hay que decidir entre la Ruta A y la Ruta B (§3.2). |
 
 ⚠️ **Urgente, requiere tu autorización:** si `aks-sa-p8` sigue vivo, su llave es la **única** que descifra los 3 ciphertexts de Git y los 2 que no se publicaron. Hay que respaldarla antes de cualquier destrucción.
@@ -344,7 +344,7 @@ spec:
     automated: { prune: true, selfHeal: true }
 ```
 
-En [sealed-secrets.yaml](P9/charts/sa-platform/templates/sealed-secrets.yaml) se agrega `argocd.argoproj.io/sync-wave: "-1"` en el `metadata` de cada `SealedSecret`. Con scope strict, el ciphertext solo depende del nombre y el namespace, así que la anotación no lo invalida.
+En [sealed-secrets.yaml](../charts/sa-platform/templates/sealed-secrets.yaml) se agrega `argocd.argoproj.io/sync-wave: "-1"` en el `metadata` de cada `SealedSecret`. Con scope strict, el ciphertext solo depende del nombre y el namespace, así que la anotación no lo invalida.
 
 **Los health checks que hacen que las olas funcionen de verdad:**
 - **`SealedSecret`:** el health de ArgoCD viene integrado y lo comprobé en el código.

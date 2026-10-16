@@ -47,7 +47,7 @@ spec:
           # Imagen del propio CI (nginx alpine: sh + wget de busybox). Pasa por las
           # 3 políticas de Kyverno: sirve también como prueba de que ghcr-secret y la
           # verificación de firma funcionan después de la reconstrucción.
-          image: ghcr.io/elfbibv/sa-api-gateway:v8.0.0
+          image: ghcr.io/elfbibv/sa-api-gateway:c46f099
           command: ["sh", "/scripts/smoke.sh"]
           securityContext:
             allowPrivilegeEscalation: false

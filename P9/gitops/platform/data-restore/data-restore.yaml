@@ -86,7 +86,7 @@ data:
   # P9/scripts/publish-gitops.sh + PR. Mientras quede en skip-if-empty, una
   # BSL mal configurada parece "sin respaldos" y el bootstrap sigue con
   # volúmenes nuevos SIN avisar (rúbrica 2.6 no se cumple con ese valor).
-  RESTORE_MODE: skip-if-empty
+  RESTORE_MODE: required
   BSL_TIMEOUT_S: "900"
   RESTORE_TIMEOUT_S: "2700"
 ---

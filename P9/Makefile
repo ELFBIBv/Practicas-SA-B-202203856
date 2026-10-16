@@ -7,7 +7,7 @@ TF_DIR  := terraform
 TF_STACKS := 00-persistent 01-cluster 02-platform
 RAW_LOG := evidencia/bootstrap/raw
 
-.PHONY: help bootstrap backend plan verify verify-lock destroy-cluster audit fmt-check validate
+.PHONY: help bootstrap backend plan verify verify-lock destroy-cluster audit fmt-check validate dr-restore-test dr-node-test dr-rebuild-test
 
 help: ## Lista los objetivos disponibles.
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -27,6 +27,15 @@ verify: ## Solo verificaciones finales contra el clúster existente.
 
 destroy-cluster: ## IRREVERSIBLE. Destruye solo 01-cluster. Uso: make destroy-cluster CONFIRM=aks-sa-p9
 	./scripts/destroy-cluster.sh --confirm "$(CONFIRM)"
+
+dr-restore-test: ## Prueba de restauración de datos verificada (2.3/2.6). Log en evidencia/restauracion/.
+	./scripts/dr-data-restore-test.sh
+
+dr-node-test: ## Prueba de pérdida de nodo con sondeo continuo (2.5). Uso: make dr-node-test [NODE=<nodo>]
+	./scripts/dr-node-drain-test.sh $(NODE)
+
+dr-rebuild-test: ## IRREVERSIBLE. Destrucción + reconstrucción cronometrada. Uso: make dr-rebuild-test CONFIRM=aks-sa-p9
+	./scripts/dr-rebuild-test.sh --confirm "$(CONFIRM)"
 
 verify-lock: ## Prueba que el backend bloquea el estado (blob lease).
 	./scripts/verify-tfstate-lock.sh

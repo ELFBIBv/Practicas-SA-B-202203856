@@ -1,0 +1,162 @@
+# Validación estática de la Práctica 9 (continuidad operativa y DR).
+# Independiente del pipeline de P8 (ci-cd.yml): solo se dispara con cambios en
+# P9/** o en este archivo, no necesita credenciales de Azure ni acceso a ningún
+# clúster y no publica nada.
+name: P9 - Validación estática DR
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "P9/**"
+      - ".github/workflows/p9-validate.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "P9/**"
+      - ".github/workflows/p9-validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p9-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.3"
+          terraform_wrapper: false
+      - name: terraform fmt -check
+        run: terraform -chdir=P9/terraform fmt -check -recursive -diff
+      - name: terraform validate (sin backend remoto)
+        run: |
+          for stack in 00-persistent 01-cluster 02-platform; do
+            echo "::group::$stack"
+            terraform -chdir="P9/terraform/$stack" init -backend=false -input=false
+            terraform -chdir="P9/terraform/$stack" validate
+            echo "::endgroup::"
+          done
+
+  scripts:
+    name: shellcheck + pruebas unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck de los scripts de P9
+        run: |
+          shellcheck --version
+          shellcheck -x -P P9/scripts P9/scripts/*.sh P9/scripts/lib/*.sh P9/scripts/tests/*.sh
+      - name: Pruebas unitarias de la lógica de DR (sin clúster)
+        run: P9/scripts/tests/dr-tests-lib.test.sh
+
+  manifests:
+    name: Helm lint/render + YAML GitOps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.21.4
+      - name: helm dependency build
+        run: helm dependency build P9/charts/sa-platform
+      - name: helm lint --strict (perfil AKS y perfil kind)
+        run: |
+          cd P9/charts/sa-platform
+          helm lint --strict . -f values.yaml -f values-azure.yaml
+          helm lint --strict . -f values.yaml -f values-dev.yaml -f values-kind.yaml
+      - name: Esquemas Kubernetes y CRD (kubeconform)
+        env:
+          KUBECONFORM_VERSION: v0.8.0
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/CHECKSUMS"
+          grep ' kubeconform-linux-amd64.tar.gz$' CHECKSUMS | sha256sum -c -
+          tar xzf kubeconform-linux-amd64.tar.gz kubeconform
+          cd "$GITHUB_WORKSPACE"
+          helm template sa-platform P9/charts/sa-platform -n sa-p5 \
+            -f P9/charts/sa-platform/values.yaml -f P9/charts/sa-platform/values-azure.yaml > "$RUNNER_TEMP/render-azure.yaml"
+          CRDS='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          "$RUNNER_TEMP/kubeconform" -strict -summary -kubernetes-version 1.33.0 \
+            -schema-location default -schema-location "$CRDS" \
+            "$RUNNER_TEMP/render-azure.yaml" P9/gitops/apps P9/gitops/platform P9/gitops/platform-secrets P9/kyverno/policies
+      - name: Render del perfil AKS y controles de resiliencia (rúbrica 2.5)
+        run: |
+          helm template sa-platform P9/charts/sa-platform -n sa-p5 \
+            -f P9/charts/sa-platform/values.yaml -f P9/charts/sa-platform/values-azure.yaml > /tmp/render.yaml
+          python3 - <<'PY'
+          import sys, yaml
+          docs = [d for d in yaml.safe_load_all(open("/tmp/render.yaml")) if d]
+          pdb = {d["metadata"]["name"] for d in docs if d["kind"] == "PodDisruptionBudget"}
+          errors = []
+          for d in docs:
+              if d["kind"] not in ("Deployment", "Rollout"):
+                  continue
+              name = d["metadata"]["name"]
+              spec = d["spec"]["template"]["spec"]
+              c = spec["containers"][0]
+              if not spec.get("topologySpreadConstraints"):
+                  errors.append(f"{name}: sin topologySpreadConstraints")
+              if not spec.get("affinity", {}).get("podAntiAffinity"):
+                  errors.append(f"{name}: sin podAntiAffinity")
+              if spec.get("affinity", {}).get("podAntiAffinity", {}).get("requiredDuringSchedulingIgnoredDuringExecution"):
+                  errors.append(f"{name}: anti-afinidad required (puede dejar Pods Pending con 2 nodos)")
+              for probe in ("livenessProbe", "readinessProbe", "startupProbe"):
+                  if probe not in c:
+                      errors.append(f"{name}: sin {probe}")
+              if name not in pdb:
+                  errors.append(f"{name}: sin PodDisruptionBudget")
+          for d in docs:
+              if d["kind"] == "PodDisruptionBudget" and d["spec"].get("minAvailable") not in (None, 1):
+                  errors.append(f"{d['metadata']['name']}: minAvailable={d['spec']['minAvailable']} (revisar contra réplicas)")
+          print("\n".join(errors) or "Resiliencia OK: spread, anti-afinidad preferida, probes y PDB en todos los workloads.")
+          sys.exit(1 if errors else 0)
+          PY
+      - name: Parseo de YAML GitOps y Schedule de Velero con retención
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          errors = []
+          for f in sorted(glob.glob("P9/gitops/**/*.yaml", recursive=True) + glob.glob("P9/kyverno/policies/*.yaml")):
+              try:
+                  docs = [d for d in yaml.safe_load_all(open(f)) if d]
+              except yaml.YAMLError as e:
+                  errors.append(f"{f}: YAML inválido: {e}")
+                  continue
+              for d in docs:
+                  if d.get("kind") == "Application":
+                      auto = d["spec"].get("syncPolicy", {}).get("automated", {})
+                      if not auto.get("selfHeal"):
+                          errors.append(f"{f}: Application sin selfHeal")
+                  if d.get("kind") == "Schedule":
+                      t = d["spec"]["template"]
+                      if not d["spec"].get("schedule") or not t.get("ttl"):
+                          errors.append(f"{f}: Schedule sin cron o sin ttl")
+                      if not t.get("snapshotMoveData") and not t.get("defaultVolumesToFsBackup"):
+                          errors.append(f"{f}: Schedule sin respaldo de volúmenes")
+                  if d.get("kind") == "ClusterPolicy" and d["spec"].get("validationFailureAction") != "Enforce":
+                      errors.append(f"{f}: ClusterPolicy fuera de Enforce")
+          print("\n".join(errors) or "Manifiestos GitOps OK.")
+          sys.exit(1 if errors else 0)
+          PY
+
+  audit:
+    name: Auditoría de estado y credenciales
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sin tfstate, planes, tfvars, kubeconfigs ni llaves rastreados
+        run: P9/scripts/audit-repo.sh

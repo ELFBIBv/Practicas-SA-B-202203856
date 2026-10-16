@@ -12,16 +12,16 @@ No uso `|| true`, porque ocultaría errores reales como falta de permisos o una 
 
 | Ruta | Qué hace |
 |---|---|
-| [scripts/bootstrap.sh](P9/scripts/bootstrap.sh) | Punto de entrada: `all` (por defecto), `backend` o `plan` |
-| [scripts/lib/tfstate-backend.sh](P9/scripts/lib/tfstate-backend.sh) | Crea o reutiliza el backend, elige la autenticación y ejecuta `init` |
-| [scripts/lib/common.sh](P9/scripts/lib/common.sh) | Logs en ISO 8601 UTC, reintentos, comprobación de versiones |
-| [scripts/verify-tfstate-lock.sh](P9/scripts/verify-tfstate-lock.sh) | Prueba que el estado queda bloqueado mientras Terraform lo usa |
-| [scripts/audit-repo.sh](P9/scripts/audit-repo.sh) | Revisa lo rastreado y lo preparado en git antes de cada commit |
-| [terraform/backend.tf](P9/terraform/backend.tf) | `backend "azurerm" {}` sin valores fijos |
-| [Makefile](P9/Makefile) | `bootstrap`, `backend`, `plan`, `verify-lock`, `audit`, `fmt-check`, `validate` |
-| [docs/terraform-backend.md](P9/docs/terraform-backend.md) | Comparación de opciones, idempotencia paso a paso, locking, riesgos y validaciones |
+| [scripts/bootstrap.sh](../scripts/bootstrap.sh) | Punto de entrada: `all` (por defecto), `backend` o `plan` |
+| [scripts/lib/tfstate-backend.sh](../scripts/lib/tfstate-backend.sh) | Crea o reutiliza el backend, elige la autenticación y ejecuta `init` |
+| [scripts/lib/common.sh](../scripts/lib/common.sh) | Logs en ISO 8601 UTC, reintentos, comprobación de versiones |
+| [scripts/verify-tfstate-lock.sh](../scripts/verify-tfstate-lock.sh) | Prueba que el estado queda bloqueado mientras Terraform lo usa |
+| [scripts/audit-repo.sh](../scripts/audit-repo.sh) | Revisa lo rastreado y lo preparado en git antes de cada commit |
+| [terraform/backend.tf](../terraform/01-cluster/backend.tf) | `backend "azurerm" {}` sin valores fijos |
+| [Makefile](../Makefile) | `bootstrap`, `backend`, `plan`, `verify-lock`, `audit`, `fmt-check`, `validate` |
+| [docs/terraform-backend.md](terraform-backend.md) | Comparación de opciones, idempotencia paso a paso, locking, riesgos y validaciones |
 
-Además cambié [terraform/README.md](P9/terraform/README.md), cuya nota decía "backend local".
+Además cambié [terraform/README.md](../terraform/README.md), cuya nota decía "backend local".
 
 **Orden que sigue `bootstrap.sh`** (desde la raíz: `./P9/scripts/bootstrap.sh` o `make -C P9 bootstrap`):
 1. Comprueba herramientas, Terraform ≥ 1.5 y la sesión de `az`.

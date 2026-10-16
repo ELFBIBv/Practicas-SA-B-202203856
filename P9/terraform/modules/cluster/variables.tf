@@ -50,3 +50,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "public_ip_name" {
+  description = "Nombre fijo de la IP pública (salida de AKS + Service del gateway). Debe coincidir con service.beta.kubernetes.io/azure-pip-name en charts/sa-platform/values-azure.yaml."
+  type        = string
+  default     = "pip-sa-p9-gateway"
+}

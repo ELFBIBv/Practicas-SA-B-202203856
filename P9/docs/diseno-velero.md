@@ -64,7 +64,7 @@ En esta práctica ambas variables valen lo mismo (una sola persona hace both rol
 
 ## 4. Modo de respaldo: CSI snapshot + data mover, no FSB
 
-**Decisión confirmada:** `deployNodeAgent: true`, `snapshotsEnabled: true`, `configuration.features: "EnableCSI"`, `VolumeSnapshotClass` `managed-csi` (la que ya trae AKS por defecto — no se declara una nueva), y `snapshotMoveData: true` en el `Schedule`.
+**Decisión confirmada:** `deployNodeAgent: true`, `snapshotsEnabled: true`, `configuration.features: "EnableCSI"`, `restorePVC.ignoreDelayBinding: true` en el node-agent (*corrección 2026-10-16*: sin ella, con `WaitForFirstConsumer` el data mover espera al Pod consumidor, que llega en una ola posterior al Job de restauración; ver `P9/evidencia/laboratorio-kind/`), `VolumeSnapshotClass` `p9-velero-azuredisk` etiquetada `velero.io/csi-volumesnapshot-class=true`, creada por `modules/velero` (`extraObjects`). *Corrección 2026-09-29:* la versión anterior de este diseño decía "`managed-csi`, la que ya trae AKS"; esa clase no existe (AKS crea `csi-azuredisk-vsc`, sin la etiqueta que Velero exige), y `snapshotMoveData: true` en el `Schedule`.
 
 **Por qué, y por qué no File System Backup (FSB/restic-kopia sobre el Pod).** Ya está razonado en `P9/docs/diseno-sync-waves.md` §0.7 y H10: FSB copia el contenido de un volumen **a través del Pod que lo tiene montado**, así que una restauración FSB necesita que el Pod (y por tanto su StatefulSet) exista **antes** que el volumen — exactamente al revés de lo que exige el orden de olas (`data-restore`, ola −10, restaura el PVC **antes** de que `sa-platform`, ola 0, cree el StatefulSet; y dentro del chart, PVC y StatefulSet van en la misma ola, nunca el PVC antes). Con CSI snapshot + data mover, `data-restore.sh` (Job de la ola −10, ver `P9/gitops/platform/data-restore/data-restore.yaml`) crea un `Restore` que solo pide `persistentvolumeclaims`/`persistentvolumes`, sin depender de que exista ningún Pod: el `node-agent` reconstruye el contenido directamente sobre el volumen restaurado.
 
@@ -102,7 +102,7 @@ metadata:
 spec:
   schedule: "*/15 * * * *"
   template:
-    ttl: 720h0m0s
+    ttl: 1440h0m0s
     includedNamespaces: [sa-p5]
     excludedResources: [secrets, sealedsecrets.bitnami.com]
     snapshotMoveData: true
@@ -112,7 +112,9 @@ spec:
 
 **Por qué cada 15 minutos.** `decisiones-pendientes.md` §2.5 ya sugería un rango de RPO de 15-30 minutos para esta práctica, sin cerrarlo. Un `Schedule` cada 15 minutos fija el **peor caso teórico** de RPO por cadencia de backup en 15 minutos (si el desastre ocurre justo antes del siguiente tick). Es el extremo más exigente del rango sugerido, lo cual es preferible a 30 min cuando el costo de correr un backup adicional cada 15 minutos es bajo (namespace pequeño, snapshot incremental). El RPO real medido depende además de la resolución del marcador de datos (`cron1` escribe cada 2 minutos, ver §7) y de en qué punto exacto del intervalo de 15 minutos ocurrió el desastre real — eso se mide, no se declara de antemano (§7).
 
-**Por qué 720h (30 días) de TTL.** `P9/docs/diseno-sync-waves.md` §7.3 ya señala el riesgo: "el TTL del Schedule acota la recuperación. Si el clúster pasa más tiempo muerto que el TTL, el GC del clúster nuevo borra los respaldos vencidos al sincronizarlos." 30 días da margen amplio para cualquier ventana realista entre la prueba de DR y la reconstrucción dentro del calendario de esta práctica, sin acercarse a un problema de costo de almacenamiento (namespace pequeño, `Standard_LRS`).
+**Corrección 2026-10-15: TTL subido a 1440h (60 días).** Con 30 días, un respaldo tomado en la prueba de DR de mediados de octubre vencería antes de la calificación (26-11), y la reconstrucción de ese día fallaría con `RESTORE_MODE=required` por no haber respaldo vigente. El RPO no cambia (lo fija la cadencia, no el TTL).
+
+**Por qué 720h (30 días) de TTL (justificación original).** `P9/docs/diseno-sync-waves.md` §7.3 ya señala el riesgo: "el TTL del Schedule acota la recuperación. Si el clúster pasa más tiempo muerto que el TTL, el GC del clúster nuevo borra los respaldos vencidos al sincronizarlos." 30 días da margen amplio para cualquier ventana realista entre la prueba de DR y la reconstrucción dentro del calendario de esta práctica, sin acercarse a un problema de costo de almacenamiento (namespace pequeño, `Standard_LRS`).
 
 **Por qué excluir `secrets` y `sealedsecrets.bitnami.com`, y por qué `kube-system` queda fuera por construcción.** Ya está razonado en `P9/docs/diseno-secretos-dr.md` §3.6 [PUNTO DE INTEGRACIÓN CON VELERO]: un `Secret` restaurado por Velero choca con su `SealedSecret` (`ErrUpdateFailed`, porque dos actores reclaman ser dueños del mismo objeto), y la llave del controlador de Sealed Secrets (que vive en `kube-system`) no debe terminar en un bucket que la identidad del clúster puede leer. `includedNamespaces: [sa-p5]` ya excluye `kube-system` por construcción (una lista de inclusión que no lo nombra), así que no hace falta una exclusión explícita adicional — la dejo así en vez de agregar `excludedNamespaces: [kube-system]` redundante.
 
@@ -154,7 +156,7 @@ Mismo formato que `diseno-secretos-dr.md` §5. Evidencia en `P9/evidencia/velero
 | ID | Comando | Resultado esperado |
 |---|---|---|
 | V-VL1 | `kubectl -n velero get backupstoragelocation default -o jsonpath='{.status.phase}{" "}{.status.lastSyncedTime}{"\n"}'` | `Available` y una marca de tiempo no vacía (H12: se escribe aunque el bucket esté vacío la primera vez). |
-| V-VL2 | `kubectl -n velero get schedule sa-p9-schedule -o jsonpath='{.status.phase}{" "}{.spec.schedule}{" "}{.spec.template.ttl}{"\n"}'` | `Enabled`, `*/15 * * * *`, `720h0m0s`. |
+| V-VL2 | `kubectl -n velero get schedule sa-p9-schedule -o jsonpath='{.status.phase}{" "}{.spec.schedule}{" "}{.spec.template.ttl}{"\n"}'` | `Enabled`, `*/15 * * * *`, `1440h0m0s`. |
 | V-VL3 | `kubectl -n velero get backups -l velero.io/schedule-name=sa-p9-schedule -o json \| jq -r '.items[] \| select(.status.phase=="Completed") \| .metadata.name + " " + .status.startTimestamp + " " + .status.completionTimestamp'` | Al menos una fila. Sin esto no hay evidencia real de 2.3: un `Schedule` creado sin ningún `Backup` `Completed` no basta (bloqueante 8.1). |
 | V-VL4 | `kubectl -n velero get backuprepositories -A` y `kubectl -n velero logs ds/node-agent --tail=50 \| grep -i error` | Sin errores de autenticación (`AADSTS`, `403`, `no such host`); confirma que Workload Identity está funcionando de punta a punta. |
 | V-VL5 | `az role assignment list --scope "$(az storage account show -n <storage_account_name> -g rg-p9-tfstate --query id -o tsv)" --query "[?principalId=='<velero_principal_id de 00-persistent>'].roleDefinitionName" -o tsv` | `Storage Blob Data Contributor`. |

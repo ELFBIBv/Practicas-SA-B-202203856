@@ -29,3 +29,11 @@ global:
   logLevel: info
   imagePullSecrets: []
   natsAuthSecretName: sa-platform-nats-auth
+
+# Reparte réplicas entre nodos (topologySpreadConstraints + anti-afinidad
+# preferida). Ver templates: rúbrica 2.5 de P9.
+spreadAcrossNodes: true
+
+# Espera antes de detener el contenedor para que el Service deje de
+# enviarle tráfico (lifecycle.preStop.sleep). Rúbrica 2.5 de P9.
+preStopSleepSeconds: 5

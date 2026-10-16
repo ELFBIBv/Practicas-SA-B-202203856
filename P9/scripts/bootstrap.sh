@@ -8,8 +8,10 @@
 #   ./P9/scripts/bootstrap.sh verify     # solo las verificaciones finales (etapas 7-11)
 #   make -C P9 bootstrap                 # equivalente a "all", con log crudo en evidencia/
 #
-# Prerrequisitos: terraform >= 1.9, az, kubectl, curl, git y una sesión
-# `az login` con rol Contributor (mínimo) sobre la suscripción destino.
+# Prerrequisitos: terraform >= 1.9, az, kubectl, curl, git, jq, yq, openssl y
+# una sesión `az login` con rol Owner (o Contributor + User Access
+# Administrator) sobre la suscripción destino: Terraform crea asignaciones de
+# rol (Key Vault, Velero, IP del clúster).
 # Variables de entorno opcionales: ver `--help`.
 set -Eeuo pipefail
 
@@ -59,13 +61,16 @@ Variables de entorno (todas opcionales; los valores por defecto son determinista
   TFSTATE_SKU              SKU de la cuenta (Standard_LRS).
   TFSTATE_AUTH             auto | azuread | key (auto).
   TF_LOCK_TIMEOUT          Espera máxima por el lock del estado (120s).
+  TF_VAR_bootstrap_object_id  Object ID de quien reconstruye (por defecto: la sesión az).
+  TF_VAR_custodian_object_id  Object ID del custodio de la llave (por defecto: el que
+                              ya tiene Secrets Officer en el vault; si no existe, la sesión az).
 USAGE
 }
 
 preflight() {
   local cmd=$1
   require_cmd az terraform git
-  [[ "$cmd" == all || "$cmd" == verify ]] && require_cmd kubectl curl
+  [[ "$cmd" == all || "$cmd" == verify ]] && require_cmd kubectl curl jq yq openssl gunzip
 
   local tf_version
   tf_version="$(terraform version | head -n1 | sed -E 's/^Terraform v//')"
@@ -86,6 +91,34 @@ stage_backend() {
   tfstate_load_config
   tfstate_ensure_backend
   tfstate_resolve_auth
+  resolve_identity_vars
+}
+
+# 00-persistent necesita los object ID de Entra ID del custodio de la llave y
+# de quien ejecuta la reconstrucción (roles del Key Vault). No son secretos,
+# pero sin ellos el plan falla con TF_INPUT=0: se derivan de la sesión `az`
+# para que un operador en una máquina limpia no tenga que escribir un tfvars.
+# El custodio se conserva del Key Vault existente: si otro operador
+# reconstruye, Terraform no le quita el rol Secrets Officer al custodio real.
+resolve_identity_vars() {
+  local me="" kv_id="" custodian=""
+  if [[ "$(azs account show --query user.type -o tsv)" == servicePrincipal ]]; then
+    me="$(az ad sp show --id "$(azs account show --query user.name -o tsv)" --query id -o tsv --only-show-errors)"
+  else
+    me="$(az ad signed-in-user show --query id -o tsv --only-show-errors)"
+  fi
+  [[ -n "$me" ]] || die "No se pudo resolver el object ID de la sesión de Azure CLI (az ad signed-in-user show)."
+  export TF_VAR_bootstrap_object_id="${TF_VAR_bootstrap_object_id:-$me}"
+  if [[ -z "${TF_VAR_custodian_object_id:-}" ]]; then
+    kv_id="$(azs keyvault show -n "$SEALED_KEYRING_VAULT" --query id -o tsv 2>/dev/null || true)"
+    if [[ -n "$kv_id" ]]; then
+      custodian="$(azs role assignment list --scope "$kv_id" --role "Key Vault Secrets Officer" \
+        --query '[0].principalId' -o tsv 2>/dev/null || true)"
+    fi
+    export TF_VAR_custodian_object_id="${custodian:-$me}"
+  fi
+  log "Identidades del Key Vault: operador=$(mask "$TF_VAR_bootstrap_object_id") custodio=$(mask "$TF_VAR_custodian_object_id")" \
+    "$([[ -n "$custodian" ]] && echo '(custodio conservado del vault existente)' || echo '')"
 }
 
 
