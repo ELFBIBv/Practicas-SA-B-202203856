@@ -1,0 +1,56 @@
+global:
+  environment: prod
+  logLevel: warn
+
+mysql:
+  persistence:
+    size: 5Gi
+
+mongodb:
+  persistence:
+    size: 5Gi
+
+api-gateway:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+auth:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+catalog:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+orders:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+notifications:
+  replicaCount: 3
+  image:
+    tag: "v1.0.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi

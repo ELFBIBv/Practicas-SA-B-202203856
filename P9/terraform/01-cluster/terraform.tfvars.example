@@ -1,0 +1,38 @@
+# Copie este archivo a terraform.tfvars (ignorado por git, ver P9/terraform/.gitignore)
+# SOLO si necesita valores distintos a los defaults del código. bootstrap.sh no
+# usa terraform.tfvars: exporta estas mismas variables como TF_VAR_* desde
+# P9/scripts/lib/p9-config.sh, así que 01-cluster y 02-platform siempre
+# concuerdan. Ningún valor de aquí es secreto.
+
+# RG del clúster (desechable: lo destruye P9/scripts/destroy-cluster.sh sin
+# tocar el backend de Terraform, que vive en un RG aparte).
+resource_group_name = "rg-p9-aks"
+
+# Región. chilecentral es donde P8 ya verificó cuota para 2x Standard_DS2_v2
+# en una suscripción Azure for Students; consulte `az account list-locations
+# -o table` para otras opciones si su suscripción está en otra región.
+location = "chilecentral"
+
+cluster_name = "aks-sa-p9"
+
+# null = versión por defecto de la región (evita quedar bloqueado por una
+# versión de Kubernetes retirada tras un desastre). Fíjela solo si necesita
+# reproducir una versión exacta; consulte `az aks get-versions -l
+# <location> -o table` para las disponibles.
+kubernetes_version = null
+
+# 2 vCPU / 7 GiB por nodo: cabe en la cuota típica de 6 vCPU de Azure for
+# Students y deja margen para un upgrade con max_surge=1.
+node_vm_size = "Standard_DS2_v2"
+
+# Mínimo 2: la prueba de pérdida de nodo (rúbrica 2.5) requiere >= 2 nodos
+# elegibles.
+node_count = 2
+
+os_disk_size_gb = 64
+
+# null si su suscripción/SKU/región no tiene zonas de disponibilidad para
+# Standard_DS2_v2 (algunas cuentas de estudiante no las tienen). Verifique con
+# `az vm list-skus --location <location> --size Standard_DS2_v2 -o table`
+# (columna Zones) antes de fijar, por ejemplo, ["1", "2"].
+availability_zones = null

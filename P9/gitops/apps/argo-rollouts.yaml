@@ -1,0 +1,36 @@
+# Wave -20: CRD y controlador de Argo Rollouts. El chart sa-platform (wave 0)
+# declara Rollout/AnalysisTemplate: sin estos CRD su sync falla con
+# "no matches for kind Rollout".
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    targetRevision: 2.43.2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+      - CreateNamespace=true
+      # Los CRD superan el límite de anotación de un apply del lado del cliente.
+      - ServerSideApply=true
+      # H8: borrar el CRD Rollout en cascada borraría el Rollout del gateway,
+      # sus ReplicaSets y sus Pods: caída total.
+      - Delete=false

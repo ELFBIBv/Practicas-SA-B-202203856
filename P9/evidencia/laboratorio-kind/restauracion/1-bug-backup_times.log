@@ -1,0 +1,18 @@
+2026-10-16T16:57:36Z [INFO]  Evidencia: P9/evidencia/restauracion/restauracion-20261016T165736Z.log (zona horaria: UTC; contexto: kind-p9-a).
+
+2026-10-16T16:57:36Z [STAGE] ===== 0. Prerrequisitos =====
+backupstoragelocation.velero.io/default condition met
+Schedule sa-p9-schedule cron=*/5 * * * * ttl=1440h0m0s fase=Enabled
+pod/sa-platform-mysql-0 condition met
+2026-10-16T16:57:36Z [INFO]  Identificador de la corrida: p9dr-20261016T165736Z
+
+2026-10-16T16:57:36Z [STAGE] ===== 1. Dato identificable previo al respaldo (M1) =====
+2026-10-16T16:57:41Z [INFO]  M1 id=p9dr-20261016T165736Z-M1 escrito_utc=2026-10-16T16:57:41.401Z
+
+2026-10-16T16:57:41Z [STAGE] ===== 2. Respaldo PROGRAMADO posterior a M1 =====
+2026-10-16T16:57:41Z [INFO]  Esperando un Backup Completed de sa-p9-schedule iniciado después de 2026-10-16T16:57:41.401Z (hasta 900s; cron del Schedule: */5 * * * *).
+2026-10-16T16:57:42Z [INFO]  Backup: todavía ninguno 
+2026-10-16T17:00:43Z [INFO]  Backup: sa-p9-schedule-20261016170034 InProgress
+2026-10-16T17:00:58Z [INFO]  Backup: sa-p9-schedule-20261016170034 WaitingForPluginOperations
+2026-10-16T17:01:59Z [INFO]  Backup: sa-p9-schedule-20261016170034 Completed
+2026-10-16T17:01:59Z [ERROR] Falló la línea 69: read -r b_start b_end < <(backup_times "$backup")

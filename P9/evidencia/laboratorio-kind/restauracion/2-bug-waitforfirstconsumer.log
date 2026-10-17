@@ -1,0 +1,34 @@
+2026-10-16T17:03:09Z [INFO]  Evidencia: P9/evidencia/restauracion/restauracion-20261016T170309Z.log (zona horaria: UTC; contexto: kind-p9-a).
+
+2026-10-16T17:03:09Z [STAGE] ===== 0. Prerrequisitos =====
+backupstoragelocation.velero.io/default condition met
+Schedule sa-p9-schedule cron=*/5 * * * * ttl=1440h0m0s fase=Enabled
+pod/sa-platform-mysql-0 condition met
+2026-10-16T17:03:10Z [INFO]  Identificador de la corrida: p9dr-20261016T170310Z
+
+2026-10-16T17:03:10Z [STAGE] ===== 1. Dato identificable previo al respaldo (M1) =====
+2026-10-16T17:03:11Z [INFO]  M1 id=p9dr-20261016T170310Z-M1 escrito_utc=2026-10-16T17:03:11.568Z
+
+2026-10-16T17:03:11Z [STAGE] ===== 2. Respaldo PROGRAMADO posterior a M1 =====
+2026-10-16T17:03:12Z [INFO]  Esperando un Backup Completed de sa-p9-schedule iniciado después de 2026-10-16T17:03:11.568Z (hasta 900s; cron del Schedule: */5 * * * *).
+2026-10-16T17:03:12Z [INFO]  Backup: todavía ninguno 
+2026-10-16T17:05:43Z [INFO]  Backup: sa-p9-schedule-20261016170534 InProgress
+2026-10-16T17:05:58Z [INFO]  Backup: sa-p9-schedule-20261016170534 WaitingForPluginOperations
+2026-10-16T17:06:28Z [INFO]  Backup: sa-p9-schedule-20261016170534 Finalizing
+2026-10-16T17:06:43Z [INFO]  Backup: sa-p9-schedule-20261016170534 Completed
+2026-10-16T17:06:44Z [INFO]  RESPALDO=sa-p9-schedule-20261016170534 inicio=2026-10-16T17:05:34Z fin=2026-10-16T17:06:29Z
+items_respaldados=630 operaciones_data_mover=2/2 expira=2026-12-15T17:05:34Z
+
+2026-10-16T17:06:44Z [STAGE] ===== 3. Dato posterior al respaldo (M2, se espera perderlo) =====
+2026-10-16T17:06:44Z [INFO]  M2 id=p9dr-20261016T170310Z-M2 escrito_utc=2026-10-16T17:06:44.247Z
+
+2026-10-16T17:06:44Z [STAGE] ===== 4. DESASTRE: borrado de los datos en producción =====
+2026-10-16T17:06:44Z [INFO]  DESASTRE=2026-10-16T17:06:44Z: marcadores de p9dr-20261016T170310Z borrados de producción (filas restantes: 0).
+
+2026-10-16T17:06:44Z [STAGE] ===== 5. Restauración con Velero en p9-restore-check =====
+restore.velero.io/p9-restore-test-20261016170644 created
+2026-10-16T17:06:55Z [INFO]  Restore p9-restore-test-20261016170644: WaitingForPluginOperations
+2026-10-16T17:36:48Z [INFO]  Restore p9-restore-test-20261016170644: FinalizingPartiallyFailed
+2026-10-16T17:37:01Z [INFO]  Restore p9-restore-test-20261016170644: PartiallyFailed
+errores=1 advertencias=
+2026-10-16T17:37:06Z [ERROR] La restauración p9-restore-test-20261016170644 terminó en PartiallyFailed.

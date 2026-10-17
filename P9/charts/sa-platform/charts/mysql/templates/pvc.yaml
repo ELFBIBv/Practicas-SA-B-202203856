@@ -1,0 +1,25 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ .Release.Name }}-mysql-data"
+  labels:
+    app: mysql
+  annotations:
+    # Sin sync-wave: ola 0, la misma que el StatefulSet (managed-csi enlaza
+    # con WaitForFirstConsumer; en una ola anterior el PVC queda Pending para
+    # siempre, sin timeout). Prune=false: no se borra al cambiar el nombre o
+    # desactivar persistence. Delete=false: borrar la Application no borra el
+    # volumen. En DR, Velero ya creó este PVC antes de esta ola; ArgoCD lo
+    # adopta. P9/docs/diseno-sync-waves.md §0.6, §2.3.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | default "2Gi" }}
+{{- end }}

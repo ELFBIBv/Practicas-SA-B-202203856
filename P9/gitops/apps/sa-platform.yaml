@@ -1,0 +1,42 @@
+# Wave 0: la plataforma (heredada de P8, antes argocd/application.yaml del repo
+# GitOps). El namespace sa-p5 lo crea Terraform (módulo tenant): sin
+# CreateNamespace aquí.
+# Llega cuando ya existen: sa-p5/ghcr-secret, sa-p5/sa-platform-nats-auth y
+# kyverno/ghcr-secret (platform-secrets, -10); los PVC de MySQL/MongoDB
+# restaurados (data-restore, -10); las 3 ClusterPolicy en Enforce y Ready
+# (kyverno-policies, -5); los CRD Rollout/AnalysisTemplate (argo-rollouts, -20).
+# Olas internas del chart: -1 SealedSecret, 0 bases/NATS, 1 microservicios +
+# HPA + CronJobs (P9/docs/diseno-sync-waves.md §1.2, §2.4).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sa-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: p9-platform
+  source:
+    repoURL: https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git
+    targetRevision: main
+    path: charts/sa-platform
+    helm:
+      # Explícito: de él salen los nombres de los PVC que busca data-restore
+      # (sa-platform-mysql-data, sa-platform-mongodb-data) y los Pods que
+      # Kyverno excluye por nombre.
+      releaseName: sa-platform
+      valueFiles:
+        - values-azure.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sa-p5
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1 # H7: con límite finito, ArgoCD deja de reintentar la misma revisión al agotarlo.
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,28 @@
+2026-10-16T16:16:42Z [INFO]  Evidencia: P9/evidencia/nodo/drenaje-20261016T161642Z.log (zona horaria: UTC; contexto: kind-p9-a).
+
+2026-10-16T16:16:42Z [STAGE] ===== 0. Prerrequisitos y ubicación de réplicas ANTES del drenaje =====
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION              CONTAINER-RUNTIME
+p9-a-control-plane   Ready    control-plane   21m   v1.37.0   172.23.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+p9-a-worker          Ready    <none>          20m   v1.37.0   172.23.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+p9-a-worker2         Ready    <none>          20m   v1.37.0   172.23.0.4    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+NAME                        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+sa-platform-api-gateway     1               N/A               4                     10m
+sa-platform-auth            1               N/A               1                     10m
+sa-platform-catalog         1               N/A               1                     10m
+sa-platform-notifications   1               N/A               1                     10m
+sa-platform-orders          1               N/A               1                     10m
+POD                                          NODO           LISTO
+sa-platform-api-gateway-8588bdb89-6cxp2      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-dwgbw      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-lmbcv      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-lvx2l      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-tg5sf      p9-a-worker2   True
+sa-platform-auth-86d994b95d-2rjgw            p9-a-worker2   True
+sa-platform-auth-86d994b95d-jwzd4            p9-a-worker2   True
+sa-platform-catalog-765d888cbc-krvk8         p9-a-worker2   True
+sa-platform-catalog-765d888cbc-ttjp2         p9-a-worker2   True
+sa-platform-notifications-65f8c97864-669hn   p9-a-worker2   True
+sa-platform-notifications-65f8c97864-vxn9r   p9-a-worker2   True
+sa-platform-orders-7559d7f788-4vnbm          p9-a-worker2   True
+sa-platform-orders-7559d7f788-dfjzg          p9-a-worker2   True
+2026-10-16T16:16:42Z [ERROR] Réplicas concentradas en un solo nodo: api-gateway auth catalog notifications orders . Revise topologySpreadConstraints antes de drenar.

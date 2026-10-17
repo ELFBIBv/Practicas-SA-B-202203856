@@ -1,0 +1,47 @@
+2026-10-16T17:45:26Z [INFO]  Evidencia: P9/evidencia/restauracion/restauracion-20261016T174526Z.log (zona horaria: UTC; contexto: kind-p9-a).
+
+2026-10-16T17:45:26Z [STAGE] ===== 0. Prerrequisitos =====
+backupstoragelocation.velero.io/default condition met
+Schedule sa-p9-schedule cron=*/5 * * * * ttl=1440h0m0s fase=Enabled
+pod/sa-platform-mysql-0 condition met
+2026-10-16T17:45:27Z [INFO]  Identificador de la corrida: p9dr-20261016T174527Z
+
+2026-10-16T17:45:27Z [STAGE] ===== 1. Dato identificable previo al respaldo (M1) =====
+2026-10-16T17:45:33Z [INFO]  M1 id=p9dr-20261016T174527Z-M1 escrito_utc=2026-10-16T17:45:32.589Z
+
+2026-10-16T17:45:33Z [STAGE] ===== 2. Respaldo PROGRAMADO posterior a M1 =====
+2026-10-16T17:45:33Z [INFO]  Esperando un Backup Completed de sa-p9-schedule iniciado después de 2026-10-16T17:45:32.589Z (hasta 900s; cron del Schedule: */5 * * * *).
+2026-10-16T17:45:34Z [INFO]  Backup: todavía ninguno 
+2026-10-16T17:45:49Z [INFO]  Backup: sa-p9-schedule-20261016174542 InProgress
+2026-10-16T17:46:04Z [INFO]  Backup: sa-p9-schedule-20261016174542 WaitingForPluginOperations
+2026-10-16T17:46:52Z [INFO]  Backup: sa-p9-schedule-20261016174542 Completed
+2026-10-16T17:46:53Z [INFO]  RESPALDO=sa-p9-schedule-20261016174542 inicio=2026-10-16T17:45:42Z fin=2026-10-16T17:46:49Z
+items_respaldados=152 operaciones_data_mover=2/2 expira=2026-12-15T17:45:42Z
+
+2026-10-16T17:47:04Z [STAGE] ===== 3. Dato posterior al respaldo (M2, se espera perderlo) =====
+2026-10-16T17:47:05Z [INFO]  M2 id=p9dr-20261016T174527Z-M2 escrito_utc=2026-10-16T17:47:05.413Z
+
+2026-10-16T17:47:05Z [STAGE] ===== 4. DESASTRE: borrado de los datos en producción =====
+2026-10-16T17:47:06Z [INFO]  DESASTRE=2026-10-16T17:47:05Z: marcadores de p9dr-20261016T174527Z borrados de producción (filas restantes: 0).
+
+2026-10-16T17:47:06Z [STAGE] ===== 5. Restauración con Velero en p9-restore-check =====
+restore.velero.io/p9-restore-test-20261016174706 created
+2026-10-16T17:47:17Z [INFO]  Restore p9-restore-test-20261016174706: WaitingForPluginOperations
+2026-10-16T17:47:57Z [INFO]  Restore p9-restore-test-20261016174706: Completed
+PVC restaurado sa-platform-mysql-data fase=Bound volumen=pvc-<guid-redactado> restore=p9-restore-test-20261016174706
+pod/mysql-verify created
+pod/mysql-verify condition met
+2026-10-16T17:50:02Z [INFO]  Contenido del volumen restaurado (id, fase, escrito_utc):
+    p9dr-20261016T174527Z-M1	pre-backup	2026-10-16T17:45:32.589000Z
+2026-10-16T17:50:02Z [INFO]  cron_logs restaurado (filas, último execution_time en hora local del cron): n/d
+2026-10-16T17:50:02Z [INFO]  M2 no está en el respaldo: pérdida esperada (escrito después de 2026-10-16T17:45:42Z).
+
+2026-10-16T17:50:02Z [STAGE] ===== 6. Recuperación en producción =====
+2026-10-16T17:50:03Z [INFO]  Producción tras la recuperación:
+    p9dr-20261016T174527Z-M1	pre-backup
+
+2026-10-16T17:50:03Z [STAGE] ===== 7. Resultado =====
+2026-10-16T17:50:03Z [INFO]  RESTAURACION_OK run=p9dr-20261016T174527Z backup=sa-p9-schedule-20261016174542 restore=p9-restore-test-20261016174706
+2026-10-16T17:50:03Z [INFO]  M1_escrito=2026-10-16T17:45:32.589Z BACKUP_inicio=2026-10-16T17:45:42Z BACKUP_fin=2026-10-16T17:46:49Z M2_escrito=2026-10-16T17:47:05.413Z DESASTRE=2026-10-16T17:47:05Z
+2026-10-16T17:50:03Z [INFO]  RESTAURACION_inicio=2026-10-16T17:47:07Z RESTAURACION_fin=2026-10-16T17:50:01Z duracion_restauracion_s=174
+2026-10-16T17:50:03Z [INFO]  RPO_MEDIDO_S=93 (DESASTRE - escrito_utc del último dato recuperado = 2026-10-16T17:47:05Z - 2026-10-16T17:45:32.589000Z). La duración de la restauración NO es el RPO.

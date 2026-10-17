@@ -1,0 +1,8 @@
+2026-09-25T00:12:44Z [verify-sskey-offline] inicio: vault=kv-sa-p9-202203856 chart=/home/alvaro/Documents/Practicas-SA-B-202203856/P9/charts/sa-platform values=/home/alvaro/Documents/Practicas-SA-B-202203856/P9/charts/sa-platform/values-azure.yaml
+OK    kyverno/ghcr-secret keys=.dockerconfigjson
+OK    sa-p5/ghcr-secret keys=.dockerconfigjson
+OK    sa-p5/sa-platform-auth-secrets keys=AES_SECRET_KEY,JWT_SECRET
+OK    sa-p5/sa-platform-mongodb keys=MONGO_URI,mongodb-database,mongodb-root-password,mongodb-root-username
+OK    sa-p5/sa-platform-mysql keys=DB_NAME,DB_PASSWORD,DB_USER,mysql-root-password
+OK    sa-p5/sa-platform-nats-auth keys=NATS_URL,token
+2026-09-25T00:12:58Z [verify-sskey-offline] fin: 6 SealedSecret verificados con 1 llave(s) del keyring, rc=0

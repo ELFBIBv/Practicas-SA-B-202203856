@@ -1,0 +1,102 @@
+2026-10-16T16:15:38Z [INFO]  Evidencia: P9/evidencia/nodo/drenaje-20261016T161538Z.log (zona horaria: UTC; contexto: kind-p9-a).
+
+2026-10-16T16:15:38Z [STAGE] ===== 0. Prerrequisitos y ubicación de réplicas ANTES del drenaje =====
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION              CONTAINER-RUNTIME
+p9-a-control-plane   Ready    control-plane   20m   v1.37.0   172.23.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+p9-a-worker          Ready    <none>          19m   v1.37.0   172.23.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+p9-a-worker2         Ready    <none>          19m   v1.37.0   172.23.0.4    <none>        Debian GNU/Linux 13 (trixie)   6.17.0-40-generic (amd64)   containerd://2.3.4
+NAME                        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+sa-platform-api-gateway     1               N/A               4                     9m31s
+sa-platform-auth            1               N/A               1                     9m31s
+sa-platform-catalog         1               N/A               1                     9m31s
+sa-platform-notifications   1               N/A               1                     9m31s
+sa-platform-orders          1               N/A               1                     9m31s
+POD                                          NODO           LISTO
+sa-platform-catalog-765d888cbc-j2kxv         p9-a-worker    True
+sa-platform-api-gateway-8588bdb89-h9624      p9-a-worker    True
+sa-platform-orders-7559d7f788-mpct5          p9-a-worker    True
+sa-platform-api-gateway-8588bdb89-ctgx9      p9-a-worker    True
+sa-platform-api-gateway-8588bdb89-v4wrf      p9-a-worker    True
+sa-platform-notifications-65f8c97864-dgq4x   p9-a-worker    True
+sa-platform-auth-86d994b95d-wcrt8            p9-a-worker    True
+sa-platform-api-gateway-8588bdb89-lvx2l      p9-a-worker2   True
+sa-platform-catalog-765d888cbc-ttjp2         p9-a-worker2   True
+sa-platform-notifications-65f8c97864-669hn   p9-a-worker2   True
+sa-platform-auth-86d994b95d-jwzd4            p9-a-worker2   True
+sa-platform-orders-7559d7f788-4vnbm          p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-lmbcv      p9-a-worker2   True
+2026-10-16T16:15:39Z [INFO]  Distribución verificada: todo workload replicado ocupa >= 2 nodos.
+2026-10-16T16:15:39Z [INFO]  Nodo a drenar: p9-a-worker. Pods de sa-p5 en ese nodo:
+    sa-platform-api-gateway-8588bdb89-ctgx9
+    sa-platform-api-gateway-8588bdb89-h9624
+    sa-platform-api-gateway-8588bdb89-v4wrf
+    sa-platform-auth-86d994b95d-wcrt8
+    sa-platform-catalog-765d888cbc-j2kxv
+    sa-platform-notifications-65f8c97864-dgq4x
+    sa-platform-orders-7559d7f788-mpct5
+
+2026-10-16T16:15:39Z [STAGE] ===== 1. Sondeo continuo de http://172.23.0.7 (/ /index.html, cada 0.2s) =====
+2026-10-16T16:15:39Z [INFO]  Sondeo en segundo plano (pid 76607) -> P9/evidencia/nodo/sondeo-20261016T161539Z.csv. Línea base de 20s...
+
+2026-10-16T16:15:59Z [STAGE] ===== 2. Drenaje de p9-a-worker (respeta PDB) =====
+2026-10-16T16:15:59Z [INFO]  DRENAJE_INICIO=2026-10-16T16:15:59Z
+node/p9-a-worker cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-4xr75, kube-system/kube-proxy-84htt, velero/node-agent-zjfsn
+evicting pod sa-p5/sa-platform-orders-7559d7f788-mpct5
+evicting pod sa-p5/sa-platform-api-gateway-8588bdb89-v4wrf
+evicting pod sa-p5/sa-platform-api-gateway-8588bdb89-ctgx9
+evicting pod sa-p5/sa-platform-api-gateway-8588bdb89-h9624
+evicting pod sa-p5/sa-platform-catalog-765d888cbc-j2kxv
+evicting pod sa-p5/sa-platform-notifications-65f8c97864-dgq4x
+evicting pod sa-p5/sa-platform-auth-86d994b95d-wcrt8
+pod/sa-platform-orders-7559d7f788-mpct5 evicted
+I1016 10:16:05.671078   78719 request.go:752] "Waited before sending request" delay="1.143528386s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://127.0.0.1:39861/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-65f8c97864-dgq4x"
+pod/sa-platform-notifications-65f8c97864-dgq4x evicted
+pod/sa-platform-auth-86d994b95d-wcrt8 evicted
+pod/sa-platform-api-gateway-8588bdb89-v4wrf evicted
+pod/sa-platform-catalog-765d888cbc-j2kxv evicted
+pod/sa-platform-api-gateway-8588bdb89-h9624 evicted
+pod/sa-platform-api-gateway-8588bdb89-ctgx9 evicted
+node/p9-a-worker drained
+2026-10-16T16:16:06Z [INFO]  DRENAJE_FIN=2026-10-16T16:16:06Z (todos los Pods desalojables fueron desalojados)
+
+2026-10-16T16:16:06Z [STAGE] ===== 3. Reprogramación y recuperación =====
+deployment.apps/sa-platform-auth condition met
+deployment.apps/sa-platform-catalog condition met
+deployment.apps/sa-platform-notifications condition met
+deployment.apps/sa-platform-orders condition met
+Generación: 1, observada: 1, fase: Healthy (esperando: Healthy, 0s transcurridos)
+El Rollout alcanzó la fase esperada: Healthy
+2026-10-16T16:16:11Z [INFO]  RECUPERADO=2026-10-16T16:16:11Z: Deployments Available, StatefulSets listos y Rollout Healthy sin p9-a-worker.
+POD                                          NODO           LISTO
+sa-platform-api-gateway-8588bdb89-6cxp2      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-dwgbw      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-lmbcv      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-lvx2l      p9-a-worker2   True
+sa-platform-api-gateway-8588bdb89-tg5sf      p9-a-worker2   True
+sa-platform-auth-86d994b95d-2rjgw            p9-a-worker2   True
+sa-platform-auth-86d994b95d-jwzd4            p9-a-worker2   True
+sa-platform-catalog-765d888cbc-krvk8         p9-a-worker2   True
+sa-platform-catalog-765d888cbc-ttjp2         p9-a-worker2   True
+sa-platform-notifications-65f8c97864-669hn   p9-a-worker2   True
+sa-platform-notifications-65f8c97864-vxn9r   p9-a-worker2   True
+sa-platform-orders-7559d7f788-4vnbm          p9-a-worker2   True
+sa-platform-orders-7559d7f788-dfjzg          p9-a-worker2   True
+2026-10-16T16:16:11Z [INFO]  Pods de sa-p5 que quedan en p9-a-worker: 0
+2026-10-16T16:16:11Z [INFO]  Observación del sondeo durante 20s más con p9-a-worker acordonado...
+
+2026-10-16T16:16:31Z [STAGE] ===== 4. Cierre: uncordon =====
+2026-10-16T16:16:31Z [INFO]  Cierre: kubectl uncordon p9-a-worker
+node/p9-a-worker uncordoned
+NAME                 STATUS   ROLES           AGE   VERSION
+p9-a-control-plane   Ready    control-plane   20m   v1.37.0
+p9-a-worker          Ready    <none>          20m   v1.37.0
+p9-a-worker2         Ready    <none>          20m   v1.37.0
+
+2026-10-16T16:16:31Z [STAGE] ===== 5. Resultado del sondeo =====
+RUTA / total=235 ok=235 fallos=0 disponibilidad=100.00% fallos_desde_drenaje=0/142 primer_fallo=- ultimo_fallo=-
+RUTA /index.html total=235 ok=235 fallos=0 disponibilidad=100.00% fallos_desde_drenaje=0/142 primer_fallo=- ultimo_fallo=-
+VEREDICTO OK (umbral 100.00% por ruta)
+2026-10-16T16:16:31Z [INFO]  Marcas: DRENAJE_INICIO=2026-10-16T16:15:59Z DRENAJE_FIN=2026-10-16T16:16:06Z RECUPERADO=2026-10-16T16:16:11Z duracion_drenaje_s=7 recuperacion_s=12
+2026-10-16T16:16:31Z [INFO]  Sondeo crudo: P9/evidencia/nodo/sondeo-20261016T161539Z.csv
+2026-10-16T16:16:31Z [INFO]  NODO_OK: el servicio respondió durante el drenaje de p9-a-worker.

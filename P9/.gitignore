@@ -1,0 +1,51 @@
+# Helm dependencies
+charts/sa-platform/charts/*.tgz
+charts/sa-platform/charts/nats/
+charts/sa-platform/charts/redis/
+
+# Reportes de la prueba de carga (k6): se regeneran en cada corrida.
+loadtest/reporte-*.json
+
+# --- Terraform (defensa en profundidad; P9/terraform/.gitignore también lo cubre)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+*.tfplan
+tfplan
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+
+# --- Credenciales y material de acceso al clúster
+*.kubeconfig
+kubeconfig
+kubeconfig.yaml
+*.pem
+*.key
+*.pfx
+.env
+sealed-secrets-key*
+*keyring*
+
+# El certificado de sellado es PÚBLICO (sirve para sellar sin conexión al
+# clúster y como huella esperada en el bootstrap): sí se versiona.
+# P9/docs/diseno-secretos-dr.md §3.1, §5 (V-A6).
+!gitops/sealed-secrets/pub-cert.pem
+
+# --- Logs crudos del bootstrap: se revisan/redactan antes de copiarlos a
+# evidencia/bootstrap/ y versionarlos.
+evidencia/bootstrap/raw/
+
+# --- Salidas de scripts/verificar_p9.sh (se regeneran en cada corrida)
+reporte_p9_*.txt
+resultados_p9.csv
