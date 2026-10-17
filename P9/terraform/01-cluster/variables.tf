@@ -24,10 +24,9 @@ variable "kubernetes_version" {
   default = null
 }
 
-# 2 vCPU / 7 GiB por nodo, 4 vCPU en total: cabe en la cuota regional de
-# 6 vCPU típica de Azure for Students y deja 2 vCPU para el nodo extra
-# (max_surge = 1) durante un upgrade. Es el tamaño con el que P8 ya
-# corrió ArgoCD + Rollouts + Kyverno + Sealed Secrets + la plataforma.
+# 2 vCPU / 7 GiB por nodo, 4 vCPU en total: es toda la cuota de la familia
+# DSv2 en Azure for Students. Es el tamaño con el que P8 ya corrió ArgoCD +
+# Rollouts + Kyverno + Sealed Secrets + la plataforma.
 variable "node_vm_size" {
   type    = string
   default = "Standard_DS2_v2"
@@ -36,6 +35,20 @@ variable "node_vm_size" {
 variable "node_count" {
   type    = number
   default = 2
+}
+
+# Tercer nodo (otra familia, ver modules/cluster/main.tf): sin él no hay
+# capacidad N-1 y al drenar un nodo los reemplazos quedan Pending. Completa
+# la cuota regional de 6 vCPU, así que un upgrade con max_surge necesitaría
+# bajarlo a 0 antes.
+variable "spare_node_vm_size" {
+  type    = string
+  default = "Standard_D2s_v3"
+}
+
+variable "spare_node_count" {
+  type    = number
+  default = 1
 }
 
 # 64 GB en vez de los 128 GB por defecto: el disco de SO es el segundo costo

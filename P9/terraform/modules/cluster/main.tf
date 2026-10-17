@@ -123,3 +123,23 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   tags = var.tags
 }
+
+# Capacidad N-1. Con solo los 2 nodos de 1.9 vCPU asignables, lo reservado
+# (~2.7 vCPU) no cabe en uno: en la prueba de nodo (2026-10-17) el drenaje
+# terminó con el servicio al 100 %, pero los reemplazos quedaron Pending hasta
+# el uncordon. Otra familia de VM porque la cuota de DSv2 (4 vCPU) ya la usan
+# los nodos del sistema; con este nodo se llega al límite regional de 6 vCPU.
+resource "azurerm_kubernetes_cluster_node_pool" "spare" {
+  count = var.spare_node_count > 0 ? 1 : 0
+
+  name                  = "spare"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
+  mode                  = "User"
+  vm_size               = var.spare_node_vm_size
+  node_count            = var.spare_node_count
+  os_disk_size_gb       = var.os_disk_size_gb
+  os_disk_type          = "Managed"
+  zones                 = var.availability_zones
+
+  tags = var.tags
+}

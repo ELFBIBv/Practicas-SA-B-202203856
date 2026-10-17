@@ -34,6 +34,21 @@ variable "node_count" {
   }
 }
 
+variable "spare_node_vm_size" {
+  description = "Tamaño de VM del node pool spare (capacidad N-1)."
+  type        = string
+}
+
+variable "spare_node_count" {
+  description = "Nodos del node pool spare. 0 lo omite."
+  type        = number
+
+  validation {
+    condition     = var.spare_node_count >= 0
+    error_message = "spare_node_count no puede ser negativo."
+  }
+}
+
 variable "os_disk_size_gb" {
   description = "Disco de SO por nodo, en GB."
   type        = number
