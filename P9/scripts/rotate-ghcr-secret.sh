@@ -28,14 +28,23 @@ read -rsp "Token de GHCR (read:packages): " token || true
 echo >&2
 [[ -n "$token" ]] || die "Token vacío."
 
-# curl -K -: la credencial va por stdin, no por argv.
-code="$(curl -s -o /dev/null -w '%{http_code}' -K - <<EOF
+# curl -K -: la credencial va por stdin, no por argv. Autenticar no basta:
+# un token de otra cuenta, fine-grained o sin read:packages obtiene token de
+# registro pero recibe DENIED al leer el paquete, así que también se lista.
+reg_token="$(curl -sf -K - <<EOF | jq -r '.token // empty'
 user = "$user:$token"
 url = "https://ghcr.io/token?scope=repository:$probe_image:pull&service=ghcr.io"
 EOF
+)" || true
+[[ -n "$reg_token" ]] || die "GHCR rechazó la credencial: revise que el token no haya expirado."
+code="$(curl -s -o /dev/null -w '%{http_code}' -K - <<EOF
+header = "Authorization: Bearer $reg_token"
+url = "https://ghcr.io/v2/$probe_image/tags/list"
+EOF
 )"
-[[ "$code" == 200 ]] || die "GHCR rechazó la credencial (HTTP $code): revise que el token tenga read:packages y no haya expirado."
-log "GHCR acepta la credencial para $probe_image."
+unset reg_token
+[[ "$code" == 200 ]] || die "La credencial autentica pero no puede leer $probe_image (HTTP $code): use un token classic de la cuenta $user con read:packages."
+log "GHCR permite leer $probe_image con la credencial."
 
 dockercfg="$(GHCR_USER="$user" GHCR_TOKEN="$token" GHCR_AUTH="$(printf '%s:%s' "$user" "$token" | base64 -w0)" \
   jq -cn '{auths: {"ghcr.io": {username: env.GHCR_USER, password: env.GHCR_TOKEN, auth: env.GHCR_AUTH}}}')"
