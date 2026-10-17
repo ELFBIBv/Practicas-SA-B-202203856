@@ -1,0 +1,102 @@
+================================================================
+ VERIFICACION PRACTICA 9 - v1.0
+ Carnet: 202203856        Fecha: 2026-10-16 23:36
+ Hash del script: b51fa0fb9c3eaef6
+================================================================
+
+--- 0. Herramientas y contexto (debe verificarlo el auxiliar)
+  [OK]    Todas las herramientas presentes
+  Contexto de kubectl: aks-sa-p9
+  [OK]    Acceso al cluster confirmado
+
+--- 1. Repositorios
+  [OK]    Repositorio de codigo accesible
+  [OK]    Repositorio GitOps accesible
+  [OK]    Carpeta /P9 presente
+  [OK]    README de entrega presente
+
+--- 2.1 Bootstrap automatizado desde cero (14 pts)
+  [OK]    Punto de entrada presente: P9/scripts/bootstrap.sh
+  Pasos automatizados detectados en el bootstrap: 11
+  [OK]    Terraform instala ArgoCD (capa de plataforma)
+  Aplicaciones registradas en ArgoCD: 10
+  Aplicacion raiz 'p9-root': sync=Synced  aplicaciones hijas=9
+  [OK]    Patron app-of-apps operativo
+  [OK]    Aplicacion raiz sincronizada
+  >> 2.1 = 14 / 14
+
+--- 2.2 Estado remoto y disciplina de IaC (8 pts)
+  [OK]    Backend remoto declarado: backend "azurerm"
+  [OK]    Se evidencia bloqueo de estado
+  [OK]    Sin archivos de estado en el repositorio
+  [OK]    Sin credenciales evidentes en el codigo
+  >> 2.2 = 8 / 8
+
+--- 2.3 Respaldo y restauracion con Velero (14 pts)
+  [OK]    Velero instalado en el namespace velero
+  [OK]    Respaldo programado (1 schedule)
+  schedule=sa-p9-schedule cron=*/15 * * * * ttl=1440h0m0s
+  [OK]    Politica de retencion declarada (ttl)
+  [OK]    10 respaldo(s) completado(s)
+  ultimo=sa-p9-schedule-20261017053036 completado=2026-10-17T05:32:31Z items=628
+  destino: provider=azure bucket=velero-backups estado=Available
+  [OK]    Destino de respaldo externo configurado
+  [OK]    Los respaldos incluyen volumenes persistentes
+  >> 2.3 = 14 / 14
+
+--- 2.4 Continuidad de los secretos (8 pts)
+  [OK]    Mecanismo de secretos: SealedSecrets
+  [OK]    El procedimiento de respaldo de la llave esta documentado
+  [OK]    La llave se custodia fuera del cluster en un gestor de secretos externo
+  >> 2.4 = 8 / 8
+
+--- 2.5 Resiliencia ante perdida de nodo (8 pts)
+  [OK]    PodDisruptionBudget definido (6)
+  pdb=sa-platform-api-gateway minAvailable=1 maxUnavailable=- saludables=3
+  pdb=sa-platform-auth minAvailable=1 maxUnavailable=- saludables=2
+  pdb=sa-platform-catalog minAvailable=1 maxUnavailable=- saludables=2
+  pdb=sa-platform-nats minAvailable=- maxUnavailable=1 saludables=1
+  pdb=sa-platform-notifications minAvailable=1 maxUnavailable=- saludables=3
+  pdb=sa-platform-orders minAvailable=1 maxUnavailable=- saludables=2
+  [OK]    Anti-afinidad o distribucion topologica declarada
+  Replicas minimas entre las cargas de trabajo: 1
+  [FALLA] Existe al menos una carga de trabajo con una sola replica
+  >> 2.5 = 6 / 8
+
+--- 2.6 Restauracion de datos verificada (8 pts)
+  [OK]    PVC 'sa-platform-mysql-data' presente (fase=Bound)
+  [OK]    2 restauracion(es) ejecutada(s)
+  restore=p9-dr-20261017022525 fase=Completed desde=sa-p9-schedule-20260925071541
+  restore=p9-restore-test-20261017040255 fase=Completed desde=sa-p9-schedule-20261017040057
+  [OK]    Evidencia de verificacion de datos presente en el repositorio
+  >> 2.6 = 8 / 8
+
+--- Comprobaciones informativas
+  [OK]    Runbook presente en el repositorio
+  [OK]    El informe declara RTO y RPO
+18s         Normal    Created                        pod/sa-platform-cron1-29870256-dsc5s                                 Container created
+18s         Normal    Started                        pod/sa-platform-cron1-29870256-dsc5s                                 Container started
+15s         Warning   FailedScheduling               pod/sa-platform-api-gateway-847d4f8686-fwnsb                         0/2 nodes are available: 1 Insufficient cpu, 1 node(s) didn't match pod topology spread constraints. no new claims to deallocate, preemption: 0/2 nodes are available: 2 No preemption victims found for incoming pod.
+15s         Warning   FailedScheduling               pod/sa-platform-api-gateway-847d4f8686-w8mqb                         0/2 nodes are available: 1 Insufficient cpu, 1 node(s) didn't match pod topology spread constraints. no new claims to deallocate, preemption: 0/2 nodes are available: 2 No preemption victims found for incoming pod.
+14s         Normal    Completed                      job/sa-platform-cron1-29870256                                       Job completed
+
+================================================================
+ RESUMEN - carnet 202203856
+================================================================
+  2.1 Bootstrap automatizado ....... 14 / 14
+  2.2 Estado remoto e IaC ..........  8 / 8
+  2.3 Respaldo con Velero .......... 14 / 14
+  2.4 Continuidad de secretos ......  8 / 8
+  2.5 Resiliencia ante fallo .......  6 / 8
+  2.6 Restauracion verificada ......  8 / 8
+  --------------------------------------------
+  CONOCIMIENTO ..................... 58 / 60
+
+  Pendiente de evaluacion presencial: 40 pts
+    1.1 Runbook (12)   1.2 Informe de DR (12)
+    1.3 Diagrama del bootstrap (6)   1.4 Preguntas teoricas (10)
+
+  Requisitos eliminatorios: todos cumplidos
+
+  Duracion: 14s    Reporte: reporte_p9_202203856.txt
+================================================================

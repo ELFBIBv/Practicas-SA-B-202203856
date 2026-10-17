@@ -193,6 +193,15 @@ stage_verify() {
   restore_log="$(kubectl -n velero logs job/p9-data-restore 2>/dev/null || true)"
   if grep -qE 'RESTORE_OK|IDEMPOTENTE|GENESIS' <<<"$restore_log"; then
     grep -E 'RESTORE_OK|IDEMPOTENTE|GENESIS' <<<"$restore_log" | while IFS= read -r line; do log "data-restore: $line"; done
+  elif [[ -z "$restore_log" ]] && kubectl -n velero wait --for=condition=Complete job/p9-data-restore --timeout=5s >/dev/null 2>&1; then
+    # Re-ejecución sobre un clúster vivo: el Pod del Job ya no existe (p. ej.
+    # lo borró un drenaje) y con él su log. Se acepta solo si el Restore
+    # p9-dr-* que creó el Job quedó Completed.
+    local restore
+    restore="$(kubectl -n velero get restores.velero.io -o json | jq -r '[.items[] | select(.metadata.name | startswith("p9-dr-"))]
+      | sort_by(.metadata.creationTimestamp) | last // empty | "\(.metadata.name) fase=\(.status.phase) backup=\(.spec.backupName)"')"
+    [[ "$restore" == *" fase=Completed "* ]] || die "job/p9-data-restore está Complete pero sin log ni Restore p9-dr-* Completed (último: ${restore:-ninguno})."
+    warn "Sin log de job/p9-data-restore (su Pod ya no existe); Job Complete y restore $restore."
   else
     die "El log de job/p9-data-restore no contiene RESTORE_OK, IDEMPOTENTE ni GENESIS (P9/docs/diseno-sync-waves.md §5, paso 9)."
   fi
