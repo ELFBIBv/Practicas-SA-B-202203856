@@ -1,0 +1,258 @@
+2026-10-17T05:34:36Z [INFO]  Bootstrap P9 'all' iniciado (commit c37c050). RTO_INICIO=2026-10-17T05:34:36Z
+2026-10-17T05:34:36Z [INFO]  Terraform 1.16.3, azure-cli 2.90.0.
+
+2026-10-17T05:34:37Z [STAGE] ===== 1. Backend remoto del estado de Terraform =====
+2026-10-17T05:34:37Z [INFO]  Backend de estado: suscripción=fd84b98d… rg=rg-p9-tfstate cuenta=stp9tfc01f715c2e19 contenedor=tfstate región=chilecentral auth=auto
+2026-10-17T05:34:39Z [INFO]  Proveedor Microsoft.Storage: ya registrado.
+2026-10-17T05:34:40Z [INFO]  Proveedor Microsoft.KeyVault: ya registrado.
+2026-10-17T05:34:41Z [INFO]  Resource group rg-p9-tfstate: ya existe (no se modifica).
+2026-10-17T05:34:42Z [INFO]  Storage account stp9tfc01f715c2e19: ya existe (no se recrea).
+2026-10-17T05:34:42Z [INFO]  Asegurando versionado de blobs y soft delete (30 días)...
+2026-10-17T05:34:46Z [INFO]  Contenedor tfstate: ya existe (no se modifica).
+2026-10-17T05:34:47Z [INFO]  Candado CanNotDelete p9-tfstate-no-delete: ya existe.
+2026-10-17T05:34:47Z [INFO]  Backend remoto listo.
+2026-10-17T05:34:48Z [INFO]  Autenticación del backend: azuread.
+2026-10-17T05:34:58Z [INFO]  Identidades del Key Vault: operador=<redactado> custodio=<redactado> (custodio conservado del vault existente)
+
+2026-10-17T05:34:58Z [STAGE] ===== 2. Etapa 00-persistent (Velero: storage account + UAMI) =====
+2026-10-17T05:34:58Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/00-persistent.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Using previously-installed hashicorp/azurerm v5.7.0
+
+Terraform has been successfully initialized!
+2026-10-17T05:35:05Z [INFO]  [00-persistent] estado remoto accesible: 9 recursos en p9/00-persistent.tfstate.
+Acquiring state lock. This may take a few moments...
+data.azurerm_resource_group.persistent: Reading...
+data.azurerm_client_config.current: Reading...
+data.azurerm_client_config.current: Read complete after 0s [id=<base64-redactado>]
+data.azurerm_resource_group.persistent: Read complete after 1s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate]
+azurerm_user_assigned_identity.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero]
+azurerm_key_vault.sealed_secrets_custody: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856]
+azurerm_storage_account.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19]
+azurerm_role_assignment.sealed_secrets_bootstrap: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+azurerm_role_assignment.sealed_secrets_custodian: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+azurerm_storage_container.velero_backups: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19/blobServices/default/containers/velero-backups]
+azurerm_role_assignment.velero_storage: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+Releasing state lock. This may take a few moments...
+2026-10-17T05:35:20Z [INFO]  [00-persistent] plan sin cambios: la infraestructura ya converge con el código.
+
+2026-10-17T05:35:20Z [STAGE] ===== 3. Etapa 01-cluster (resource group + AKS) =====
+2026-10-17T05:35:20Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/01-cluster.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing modules...
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Using previously-installed hashicorp/azurerm v5.6.0
+
+Terraform has been successfully initialized!
+2026-10-17T05:35:27Z [INFO]  [01-cluster] estado remoto accesible: 5 recursos en p9/01-cluster.tfstate.
+Acquiring state lock. This may take a few moments...
+module.cluster.azurerm_resource_group.aks: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks]
+module.cluster.azurerm_user_assigned_identity.control_plane: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-aks-sa-p9]
+module.cluster.azurerm_public_ip.gateway: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.Network/publicIPAddresses/pip-sa-p9-gateway]
+module.cluster.azurerm_role_assignment.control_plane_pip: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.Network/publicIPAddresses/pip-sa-p9-gateway/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+module.cluster.azurerm_kubernetes_cluster.this: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0] will be created
+  + resource "azurerm_kubernetes_cluster_node_pool" "spare" {
+      + id                    = (known after apply)
+      + kubelet_disk_type     = (known after apply)
+      + kubernetes_cluster_id = "/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9"
+      + max_pods              = (known after apply)
+      + mode                  = "User"
+      + name                  = "spare"
+      + node_count            = 1
+      + node_image_version    = (known after apply)
+      + node_labels           = (known after apply)
+      + orchestrator_version  = (known after apply)
+      + os_disk_size_gb       = 64
+      + os_disk_type          = "Managed"
+      + os_sku                = (known after apply)
+      + os_type               = "Linux"
+      + priority              = "Regular"
+      + scale_down_mode       = "Delete"
+      + spot_max_price        = -1
+      + tags                  = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+      + ultra_ssd_enabled     = false
+      + vm_size               = "Standard_D2s_v4"
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+Releasing state lock. This may take a few moments...
+2026-10-17T05:35:47Z [INFO]  [01-cluster] plan con cambios (se aplicará exactamente este plan).
+Acquiring state lock. This may take a few moments...
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+container_name = "velero-backups"
+key_vault_name = "kv-sa-p9-202203856"
+key_vault_uri = "https://kv-sa-p9-202203856.vault.azure.net/"
+resource_group_name = "rg-p9-tfstate"
+storage_account_name = "stp9veloc01f715c2e19"
+velero_client_id = "<guid-redactado>"
+velero_principal_id = "<guid-redactado>"
+velero_tenant_id = "<guid-redactado>"
+velero_uami_id = "/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero"
+Acquiring state lock. This may take a few moments...
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Creating...
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Creation complete after 1m45s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9/agentPools/spare]
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+cluster_name = "aks-sa-p9"
+gateway_public_ip = "57.156.59.37"
+gateway_public_ip_name = "pip-sa-p9-gateway"
+kubernetes_version = "1.36.4"
+node_resource_group = "rg-p9-aks-nodes"
+oidc_issuer_url = "https://chilecentral.oic.prod-aks.azure.com/<guid-redactado>/<guid-redactado>/"
+resource_group_name = "rg-p9-aks"
+
+2026-10-17T05:37:53Z [STAGE] ===== 4. Credenciales del clúster y nodos Ready =====
+2026-10-17T05:37:55Z [INFO]  kubeconfig de P9: /home/alvaro/.kube/p9-aks-sa-p9.config (contexto aks-sa-p9).
+2026-10-17T05:37:55Z [INFO]  Esperando nodos Ready...
+node/aks-spare-42880665-vmss000000 condition met
+node/aks-system-62522726-vmss000000 condition met
+node/aks-system-62522726-vmss000001 condition met
+NAME                             STATUS   ROLES    AGE     VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+aks-spare-42880665-vmss000000    Ready    <none>   53s     v1.36.4   10.224.0.6    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-62522726-vmss000000   Ready    <none>   3h22m   v1.36.4   10.224.0.5    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-62522726-vmss000001   Ready    <none>   3h22m   v1.36.4   10.224.0.4    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+
+2026-10-17T05:37:58Z [STAGE] ===== 5. Continuidad de secretos: llave de Sealed Secrets =====
+2026-10-17T05:38:00Z [restore-sskey] inicio: vault=kv-sa-p9-202203856 cluster=aks-sa-p9
+2026-10-17T05:38:03Z [restore-sskey] keyring válido: 1 llave(s); huella esperada 7DD46ABC19BE6499 presente
+secret/sealed-secrets-keyjcfcn serverside-applied
+2026-10-17T05:38:06Z [restore-sskey] fin: llaves activas en kube-system = sealed-secrets-keyjcfcn 
+
+2026-10-17T05:38:06Z [STAGE] ===== 6. Etapa 02-platform (tenant + ArgoCD + app-of-apps + Velero) =====
+2026-10-17T05:38:06Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/02-platform.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing modules...
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/kubernetes from the dependency lock file
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Reusing previous version of hashicorp/helm from the dependency lock file
+- Using previously-installed hashicorp/kubernetes v3.2.1
+- Using previously-installed hashicorp/azurerm v5.6.0
+- Using previously-installed hashicorp/helm v3.3.0
+
+Terraform has been successfully initialized!
+2026-10-17T05:38:14Z [INFO]  [02-platform] estado remoto accesible: 17 recursos en p9/02-platform.tfstate.
+Acquiring state lock. This may take a few moments...
+data.azurerm_client_config.current: Reading...
+data.azurerm_kubernetes_cluster.this: Reading...
+data.azurerm_user_assigned_identity.velero: Reading...
+data.azurerm_client_config.current: Read complete after 0s [id=<base64-redactado>]
+data.azurerm_storage_account.velero: Reading...
+data.azurerm_user_assigned_identity.velero: Read complete after 1s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero]
+data.azurerm_storage_account.velero: Read complete after 2s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19]
+data.azurerm_kubernetes_cluster.this: Read complete after 4s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9]
+module.argocd.helm_release.argocd: Refreshing state... [id=argocd]
+module.tenant.kubernetes_namespace_v1.sa_platform: Refreshing state... [id=sa-p5]
+module.tenant.kubernetes_role_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_resource_quota_v1.platform: Refreshing state... [id=sa-p5/sa-p5-platform-quota]
+module.tenant.kubernetes_service_account_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_service_account_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator]
+module.tenant.kubernetes_limit_range_v1.platform: Refreshing state... [id=sa-p5/sa-p5-platform-limits]
+module.tenant.kubernetes_role_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator]
+module.tenant.kubernetes_role_binding_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator-binding]
+module.tenant.kubernetes_role_binding_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer-binding]
+module.velero.azurerm_federated_identity_credential.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero/federatedIdentityCredentials/fic-velero-server]
+module.velero.helm_release.velero: Refreshing state... [id=velero]
+module.seed.helm_release.seed: Refreshing state... [id=p9-app-of-apps]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+Releasing state lock. This may take a few moments...
+2026-10-17T05:38:41Z [INFO]  [02-platform] plan sin cambios: la infraestructura ya converge con el código.
+Acquiring state lock. This may take a few moments...
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+app_namespace = "sa-p5"
+argocd_version = "v3.5.3"
+root_application = "argocd/p9-root"
+
+2026-10-17T05:38:54Z [STAGE] ===== 7. ArgoCD disponible y Lua de health cargado =====
+2026-10-17T05:38:54Z [INFO]  Esperando ArgoCD en argocd...
+deployment.apps/argocd-applicationset-controller condition met
+deployment.apps/argocd-redis condition met
+deployment.apps/argocd-repo-server condition met
+deployment.apps/argocd-server condition met
+partitioned roll out complete: 1 new pods have been updated...
+customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io condition met
+
+2026-10-17T05:38:59Z [STAGE] ===== 8. Olas del app-of-apps y raíz p9-root Synced/Healthy =====
+2026-10-17T05:38:59Z [INFO]  Application sealed-secrets: Synced/Healthy/Succeeded
+2026-10-17T05:39:00Z [INFO]  OLA -30 cerrada en 1s: sealed-secrets
+2026-10-17T05:39:01Z [INFO]  Application kyverno: Synced/Healthy/Succeeded
+2026-10-17T05:39:02Z [INFO]  Application argo-rollouts: Synced/Healthy/Succeeded
+2026-10-17T05:39:03Z [INFO]  OLA -20 cerrada en 3s: kyverno,argo-rollouts
+2026-10-17T05:39:03Z [INFO]  Application platform-secrets: Synced/Healthy/Succeeded
+2026-10-17T05:39:05Z [INFO]  Application data-restore: Synced/Healthy/Succeeded
+2026-10-17T05:39:05Z [INFO]  OLA -10 cerrada en 2s: platform-secrets,data-restore
+2026-10-17T05:39:06Z [INFO]  Application kyverno-policies: Synced/Healthy/Succeeded
+2026-10-17T05:39:07Z [INFO]  OLA -5 cerrada en 2s: kyverno-policies
+2026-10-17T05:39:07Z [INFO]  Application sa-platform: Synced/Healthy/Succeeded
+2026-10-17T05:39:08Z [INFO]  OLA 0 cerrada en 1s: sa-platform
+2026-10-17T05:39:09Z [INFO]  Application velero-schedules: Synced/Healthy/Succeeded
+2026-10-17T05:39:09Z [INFO]  OLA 5 cerrada en 1s: velero-schedules
+2026-10-17T05:39:10Z [INFO]  Application platform-verify: Synced/Healthy/Succeeded
+2026-10-17T05:39:11Z [INFO]  OLA 10 cerrada en 2s: platform-verify
+2026-10-17T05:39:11Z [INFO]  Application p9-root: Synced/Healthy/Succeeded
+
+2026-10-17T05:39:12Z [STAGE] ===== 9. [VELERO] Resultado de la restauración de datos =====
+2026-10-17T05:39:33Z [ERROR] El log de job/p9-data-restore no contiene RESTORE_OK, IDEMPOTENTE ni GENESIS (P9/docs/diseno-sync-waves.md §5, paso 9).

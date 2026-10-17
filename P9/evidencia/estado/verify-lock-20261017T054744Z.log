@@ -1,0 +1,15 @@
+2026-10-17T05:47:44Z [INFO]  Backend de estado: suscripción=<redactado> rg=rg-p9-tfstate cuenta=stp9tfc01f715c2e19 contenedor=tfstate región=chilecentral auth=auto
+2026-10-17T05:47:48Z [INFO]  Autenticación del backend: azuread.
+2026-10-17T05:47:48Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/01-cluster.tfstate...
+
+2026-10-17T05:47:55Z [STAGE] ===== Prueba 1: lease externo sobre el estado real =====
+2026-10-17T05:47:57Z [INFO]  Lease tomado sobre p9/01-cluster.tfstate; estado del blob: leased.
+2026-10-17T05:48:00Z [INFO]  PASA: Terraform rechazó la operación: state blob is already locked.
+
+2026-10-17T05:48:01Z [STAGE] ===== Prueba 2: dos terraform plan concurrentes =====
+2026-10-17T05:48:05Z [INFO]  Lease de Terraform observado durante el primer plan.
+2026-10-17T05:48:08Z [INFO]  PASA: el segundo plan fue rechazado por lock mientras el primero corría.
+2026-10-17T05:48:22Z [INFO]  Primer plan terminó con código 0 (su salida no se imprime: puede contener datos del entorno).
+
+2026-10-17T05:48:22Z [STAGE] ===== Cierre =====
+2026-10-17T05:48:24Z [INFO]  PASA: sin locks huérfanos (lease.state=available). Verificación de locking terminada.

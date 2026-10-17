@@ -1,0 +1,75 @@
+2026-10-17T05:40:56Z [INFO]  Bootstrap P9 'verify' iniciado (commit 3f6fc9d). RTO_INICIO=2026-10-17T05:40:56Z
+2026-10-17T05:40:56Z [INFO]  Terraform 1.16.3, azure-cli 2.90.0.
+2026-10-17T05:40:56Z [INFO]  Backend de estado: suscripción=fd84b98d… rg=rg-p9-tfstate cuenta=stp9tfc01f715c2e19 contenedor=tfstate región=chilecentral auth=auto
+2026-10-17T05:40:58Z [INFO]  kubeconfig de P9: /home/alvaro/.kube/p9-aks-sa-p9.config (contexto aks-sa-p9).
+
+2026-10-17T05:40:58Z [STAGE] ===== 7. ArgoCD disponible y Lua de health cargado =====
+2026-10-17T05:40:58Z [INFO]  Esperando ArgoCD en argocd...
+deployment.apps/argocd-applicationset-controller condition met
+deployment.apps/argocd-redis condition met
+deployment.apps/argocd-repo-server condition met
+deployment.apps/argocd-server condition met
+partitioned roll out complete: 1 new pods have been updated...
+customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io condition met
+
+2026-10-17T05:41:02Z [STAGE] ===== 8. Olas del app-of-apps y raíz p9-root Synced/Healthy =====
+2026-10-17T05:41:03Z [INFO]  Application sealed-secrets: Synced/Healthy/Succeeded
+2026-10-17T05:41:04Z [INFO]  OLA -30 cerrada en 2s: sealed-secrets
+2026-10-17T05:41:05Z [INFO]  Application kyverno: Synced/Healthy/Succeeded
+2026-10-17T05:41:06Z [INFO]  Application argo-rollouts: Synced/Healthy/Succeeded
+2026-10-17T05:41:07Z [INFO]  OLA -20 cerrada en 3s: kyverno,argo-rollouts
+2026-10-17T05:41:07Z [INFO]  Application platform-secrets: Synced/Healthy/Succeeded
+2026-10-17T05:41:08Z [INFO]  Application data-restore: Synced/Healthy/Succeeded
+2026-10-17T05:41:09Z [INFO]  OLA -10 cerrada en 2s: platform-secrets,data-restore
+2026-10-17T05:41:10Z [INFO]  Application kyverno-policies: Synced/Healthy/Succeeded
+2026-10-17T05:41:10Z [INFO]  OLA -5 cerrada en 1s: kyverno-policies
+2026-10-17T05:41:11Z [INFO]  Application sa-platform: Synced/Healthy/Succeeded
+2026-10-17T05:41:12Z [INFO]  OLA 0 cerrada en 2s: sa-platform
+2026-10-17T05:41:13Z [INFO]  Application velero-schedules: Synced/Healthy/Succeeded
+2026-10-17T05:41:13Z [INFO]  OLA 5 cerrada en 1s: velero-schedules
+2026-10-17T05:41:14Z [INFO]  Application platform-verify: Synced/Healthy/Succeeded
+2026-10-17T05:41:15Z [INFO]  OLA 10 cerrada en 2s: platform-verify
+2026-10-17T05:41:15Z [INFO]  Application p9-root: Synced/Healthy/Succeeded
+
+2026-10-17T05:41:16Z [STAGE] ===== 9. [VELERO] Resultado de la restauración de datos =====
+2026-10-17T05:41:39Z [WARN]  Sin log de job/p9-data-restore (su Pod ya no existe); Job Complete y restore p9-dr-20261017022525 fase=Completed backup=sa-p9-schedule-20260925071541.
+
+2026-10-17T05:41:39Z [STAGE] ===== 10. Controladores (Sealed Secrets, Argo Rollouts, Kyverno, Velero) y políticas en Enforce =====
+2026-10-17T05:41:39Z [INFO]  Verificando controladores...
+deployment "sealed-secrets-controller" successfully rolled out
+deployment.apps/argo-rollouts condition met
+deployment.apps/kyverno-admission-controller condition met
+deployment.apps/kyverno-background-controller condition met
+deployment.apps/kyverno-cleanup-controller condition met
+deployment.apps/kyverno-reports-controller condition met
+deployment.apps/velero condition met
+daemon set "node-agent" successfully rolled out
+backupstoragelocation.velero.io/default condition met
+schedule.velero.io/sa-p9-schedule condition met
+Warning: kyverno.io/v1 ClusterPolicy is deprecated and will be removed in a future release; migrate to ValidatingPolicy, MutatingPolicy, GeneratingPolicy or ImageValidatingPolicy (policies.kyverno.io), see https://kyverno.io/docs/guides/migration-to-cel/
+2026-10-17T05:41:47Z [INFO]  ClusterPolicies: require-non-root-user=Enforce restrict-image-registries=Enforce verify-image-signatures=Enforce 
+Warning: kyverno.io/v1 ClusterPolicy is deprecated and will be removed in a future release; migrate to ValidatingPolicy, MutatingPolicy, GeneratingPolicy or ImageValidatingPolicy (policies.kyverno.io), see https://kyverno.io/docs/guides/migration-to-cel/
+clusterpolicy.kyverno.io/require-non-root-user condition met
+clusterpolicy.kyverno.io/restrict-image-registries condition met
+clusterpolicy.kyverno.io/verify-image-signatures condition met
+
+2026-10-17T05:41:48Z [STAGE] ===== 11. Workloads de sa-p5 =====
+2026-10-17T05:41:48Z [INFO]  Esperando workloads en sa-p5...
+deployment.apps/sa-platform-auth condition met
+deployment.apps/sa-platform-catalog condition met
+deployment.apps/sa-platform-notifications condition met
+deployment.apps/sa-platform-orders condition met
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+Generación: 3, observada: 3, fase: Healthy (esperando: Healthy, 0s transcurridos)
+El Rollout alcanzó la fase esperada: Healthy
+
+2026-10-17T05:41:54Z [STAGE] ===== 12. Endpoint funcional =====
+2026-10-17T05:41:54Z [INFO]  Esperando IP pública del Service sa-platform-api-gateway...
+2026-10-17T05:41:55Z [INFO]  OK http://57.156.59.37/ready
+2026-10-17T05:41:55Z [INFO]  OK http://57.156.59.37/api/auth/health
+2026-10-17T05:41:55Z [INFO]  OK http://57.156.59.37/api/catalog/health
+2026-10-17T05:41:56Z [INFO]  OK http://57.156.59.37/api/orders/health
+2026-10-17T05:41:56Z [INFO]  Gateway respondiendo en http://57.156.59.37
+2026-10-17T05:41:56Z [INFO]  Verificación terminada en 60s.

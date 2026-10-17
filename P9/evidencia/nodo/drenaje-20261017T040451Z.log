@@ -1,0 +1,237 @@
+2026-10-17T04:04:51Z [INFO]  Evidencia: P9/evidencia/nodo/drenaje-20261017T040451Z.log (zona horaria: UTC; contexto: aks-sa-p9).
+
+2026-10-17T04:04:51Z [STAGE] ===== 0. Prerrequisitos y ubicación de réplicas ANTES del drenaje =====
+NAME                             STATUS   ROLES    AGE    VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+aks-system-62522726-vmss000000   Ready    <none>   109m   v1.36.4   10.224.0.5    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-62522726-vmss000001   Ready    <none>   109m   v1.36.4   10.224.0.4    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+NAME                        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+sa-platform-api-gateway     1               N/A               4                     98m
+sa-platform-auth            1               N/A               1                     98m
+sa-platform-catalog         1               N/A               1                     98m
+sa-platform-nats            N/A             1                 1                     98m
+sa-platform-notifications   1               N/A               1                     98m
+sa-platform-orders          1               N/A               1                     98m
+POD                                          NODO                             LISTO
+sa-platform-catalog-767df84554-n9twx         aks-system-62522726-vmss000000   True
+sa-platform-mysql-0                          aks-system-62522726-vmss000000   True
+sa-platform-orders-fdf944d7d-frrpq           aks-system-62522726-vmss000000   True
+sa-platform-notifications-6c869f8789-s6bdk   aks-system-62522726-vmss000000   True
+sa-platform-api-gateway-847d4f8686-stxxg     aks-system-62522726-vmss000000   True
+sa-platform-auth-766b97f5c7-ttqb9            aks-system-62522726-vmss000000   True
+sa-platform-api-gateway-847d4f8686-7dtg6     aks-system-62522726-vmss000000   True
+sa-platform-api-gateway-847d4f8686-2ff77     aks-system-62522726-vmss000000   True
+sa-platform-mongodb-0                        aks-system-62522726-vmss000001   True
+sa-platform-catalog-767df84554-gm9dp         aks-system-62522726-vmss000001   True
+sa-platform-auth-766b97f5c7-xz2ff            aks-system-62522726-vmss000001   True
+sa-platform-nats-0                           aks-system-62522726-vmss000001   True
+sa-platform-notifications-6c869f8789-kxzkb   aks-system-62522726-vmss000001   True
+sa-platform-api-gateway-847d4f8686-ls4fj     aks-system-62522726-vmss000001   True
+sa-platform-api-gateway-847d4f8686-gmt9s     aks-system-62522726-vmss000001   True
+sa-platform-orders-fdf944d7d-gfx6x           aks-system-62522726-vmss000001   True
+2026-10-17T04:04:55Z [INFO]  Distribución verificada: todo workload replicado ocupa >= 2 nodos.
+2026-10-17T04:04:57Z [INFO]  Nodo a drenar: aks-system-62522726-vmss000000. Pods de sa-p5 en ese nodo:
+    p9-platform-verify-kf8ms
+    sa-platform-api-gateway-847d4f8686-2ff77
+    sa-platform-api-gateway-847d4f8686-7dtg6
+    sa-platform-api-gateway-847d4f8686-stxxg
+    sa-platform-auth-766b97f5c7-ttqb9
+    sa-platform-catalog-767df84554-n9twx
+    sa-platform-cron1-29870160-l98jj
+    sa-platform-cron1-29870162-pkrrm
+    sa-platform-cron1-29870164-qjcwn
+    sa-platform-cron2-29870140-cpqt6
+    sa-platform-cron2-29870150-cfxgh
+    sa-platform-cron2-29870160-tnkpw
+    sa-platform-mysql-0
+    sa-platform-notifications-6c869f8789-s6bdk
+    sa-platform-orders-fdf944d7d-frrpq
+
+2026-10-17T04:04:59Z [STAGE] ===== 1. Sondeo continuo de http://57.156.59.37 (/ready /api/catalog/health /api/orders/health, cada 1s) =====
+2026-10-17T04:04:59Z [INFO]  Sondeo en segundo plano (pid 1355520) -> P9/evidencia/nodo/sondeo-20261017T040459Z.csv. Línea base de 60s...
+
+2026-10-17T04:05:59Z [STAGE] ===== 2. Drenaje de aks-system-62522726-vmss000000 (respeta PDB) =====
+2026-10-17T04:05:59Z [INFO]  DRENAJE_INICIO=2026-10-17T04:05:59Z
+node/aks-system-62522726-vmss000000 cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/azure-cns-844cd, kube-system/azure-ip-masq-agent-bqbff, kube-system/cilium-vm8bz, kube-system/cloud-node-manager-jj6w6, kube-system/csi-azuredisk-node-zsf49, kube-system/csi-azurefile-node-vpdmd, velero/node-agent-82qp6
+evicting pod velero/sa-p5-default-kopia-maintain-job-1792207797958-rsrv7
+evicting pod sa-p5/sa-platform-cron2-29870160-tnkpw
+evicting pod kyverno/kyverno-cleanup-controller-c545758c8-v2tnx
+evicting pod sa-p5/sa-platform-cron1-29870162-pkrrm
+evicting pod sa-p5/sa-platform-cron1-29870164-qjcwn
+evicting pod sa-p5/p9-platform-verify-kf8ms
+evicting pod sa-p5/sa-platform-cron2-29870140-cpqt6
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-2ff77
+evicting pod sa-p5/sa-platform-cron2-29870150-cfxgh
+evicting pod sa-p5/sa-platform-auth-766b97f5c7-ttqb9
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-7dtg6
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-stxxg
+evicting pod sa-p5/sa-platform-catalog-767df84554-n9twx
+evicting pod sa-p5/sa-platform-cron1-29870160-l98jj
+evicting pod kube-system/coredns-76df789c68-676cd
+evicting pod argo-rollouts/argo-rollouts-866c644d5-pm6jg
+evicting pod kube-system/azure-wi-webhook-controller-manager-54b5965785-9bmxr
+evicting pod argocd/argocd-redis-c4fdd947-s5x2f
+evicting pod argocd/argocd-server-64954b5c55-qhzfr
+evicting pod argocd/argocd-repo-server-58d667f4bd-xq4ts
+evicting pod kube-system/azure-wi-webhook-controller-manager-54b5965785-vw4bk
+evicting pod kube-system/cilium-operator-7664488f9b-2kjcl
+evicting pod sa-p5/sa-platform-mysql-0
+evicting pod sa-p5/sa-platform-notifications-6c869f8789-s6bdk
+evicting pod kube-system/konnectivity-agent-89d7cd48-hnkt9
+evicting pod kube-system/coredns-76df789c68-xs8dt
+evicting pod kube-system/konnectivity-agent-autoscaler-747595f466-gdsj4
+evicting pod kyverno/kyverno-admission-controller-c8db7fccd-mrd94
+evicting pod kube-system/konnectivity-agent-89d7cd48-dbdck
+evicting pod kube-system/coredns-autoscaler-548c6d85c6-tpkmh
+evicting pod kyverno/kyverno-background-controller-f687dc8b9-lfdh9
+evicting pod sa-p5/sa-platform-orders-fdf944d7d-frrpq
+pod/sa-platform-cron1-29870164-qjcwn evicted
+pod/sa-platform-cron2-29870160-tnkpw evicted
+pod/p9-platform-verify-kf8ms evicted
+pod/sa-p5-default-kopia-maintain-job-1792207797958-rsrv7 evicted
+pod/sa-platform-cron1-29870162-pkrrm evicted
+pod/sa-platform-cron2-29870140-cpqt6 evicted
+pod/sa-platform-cron2-29870150-cfxgh evicted
+pod/sa-platform-cron1-29870160-l98jj evicted
+I1016 22:06:04.486230 1357309 request.go:752] "Waited before sending request" delay="1.200610431s" reason="client-side throttling, not priority and fairness" verb="POST" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/kube-system/pods/azure-wi-webhook-controller-manager-54b5965785-9bmxr/eviction"
+error when evicting pods/"azure-wi-webhook-controller-manager-54b5965785-vw4bk" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/argocd-server-64954b5c55-qhzfr evicted
+error when evicting pods/"coredns-76df789c68-xs8dt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/argo-rollouts-866c644d5-pm6jg evicted
+error when evicting pods/"konnectivity-agent-89d7cd48-dbdck" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/cilium-operator-7664488f9b-2kjcl evicted
+pod/azure-wi-webhook-controller-manager-54b5965785-9bmxr evicted
+pod/argocd-redis-c4fdd947-s5x2f evicted
+pod/kyverno-admission-controller-c8db7fccd-mrd94 evicted
+pod/konnectivity-agent-autoscaler-747595f466-gdsj4 evicted
+pod/coredns-autoscaler-548c6d85c6-tpkmh evicted
+pod/kyverno-background-controller-f687dc8b9-lfdh9 evicted
+pod/kyverno-cleanup-controller-c545758c8-v2tnx evicted
+pod/coredns-76df789c68-676cd evicted
+evicting pod kube-system/azure-wi-webhook-controller-manager-54b5965785-vw4bk
+error when evicting pods/"azure-wi-webhook-controller-manager-54b5965785-vw4bk" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/coredns-76df789c68-xs8dt
+error when evicting pods/"coredns-76df789c68-xs8dt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/konnectivity-agent-89d7cd48-dbdck
+I1016 22:06:14.599601 1357309 request.go:752] "Waited before sending request" delay="2.454148778s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+error when evicting pods/"konnectivity-agent-89d7cd48-dbdck" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/azure-wi-webhook-controller-manager-54b5965785-vw4bk
+evicting pod kube-system/coredns-76df789c68-xs8dt
+evicting pod kube-system/konnectivity-agent-89d7cd48-dbdck
+pod/azure-wi-webhook-controller-manager-54b5965785-vw4bk evicted
+I1016 22:06:24.601204 1357309 request.go:752] "Waited before sending request" delay="2.479296587s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+pod/coredns-76df789c68-xs8dt evicted
+I1016 22:06:34.800297 1357309 request.go:752] "Waited before sending request" delay="2.03501113s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/kube-system/pods/konnectivity-agent-89d7cd48-hnkt9"
+pod/konnectivity-agent-89d7cd48-hnkt9 evicted
+I1016 22:06:44.800617 1357309 request.go:752] "Waited before sending request" delay="1.888656655s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/kube-system/pods/konnectivity-agent-89d7cd48-dbdck"
+pod/konnectivity-agent-89d7cd48-dbdck evicted
+I1016 22:06:55.001180 1357309 request.go:752] "Waited before sending request" delay="1.778732502s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:07:05.199772 1357309 request.go:752] "Waited before sending request" delay="1.669786523s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:07:15.400490 1357309 request.go:752] "Waited before sending request" delay="1.600238116s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:07:25.599810 1357309 request.go:752] "Waited before sending request" delay="1.642934556s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:07:35.599892 1357309 request.go:752] "Waited before sending request" delay="1.633972151s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:07:45.803370 1357309 request.go:752] "Waited before sending request" delay="1.64526367s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:07:56.000028 1357309 request.go:752] "Waited before sending request" delay="1.646202401s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:08:06.202340 1357309 request.go:752] "Waited before sending request" delay="1.61021503s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:08:16.401042 1357309 request.go:752] "Waited before sending request" delay="1.678631707s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:08:26.600012 1357309 request.go:752] "Waited before sending request" delay="1.586478313s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:08:36.799789 1357309 request.go:752] "Waited before sending request" delay="1.64161016s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:08:47.000141 1357309 request.go:752] "Waited before sending request" delay="1.651269697s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:08:57.000831 1357309 request.go:752] "Waited before sending request" delay="1.564657783s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:09:07.201279 1357309 request.go:752] "Waited before sending request" delay="1.696024284s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:09:17.399606 1357309 request.go:752] "Waited before sending request" delay="1.556628093s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-stxxg"
+I1016 22:09:27.400018 1357309 request.go:752] "Waited before sending request" delay="1.588680213s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:09:37.600556 1357309 request.go:752] "Waited before sending request" delay="1.697559571s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:09:47.800689 1357309 request.go:752] "Waited before sending request" delay="1.682439923s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-stxxg"
+I1016 22:09:57.999828 1357309 request.go:752] "Waited before sending request" delay="1.67313395s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:10:08.000445 1357309 request.go:752] "Waited before sending request" delay="1.652367682s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:10:18.199547 1357309 request.go:752] "Waited before sending request" delay="1.64522564s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:10:28.199917 1357309 request.go:752] "Waited before sending request" delay="1.560399356s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:10:38.399952 1357309 request.go:752] "Waited before sending request" delay="1.6589316s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:10:48.600480 1357309 request.go:752] "Waited before sending request" delay="1.549807711s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:10:58.800263 1357309 request.go:752] "Waited before sending request" delay="1.616566866s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:11:08.801138 1357309 request.go:752] "Waited before sending request" delay="1.695702691s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-stxxg"
+I1016 22:11:18.999490 1357309 request.go:752] "Waited before sending request" delay="1.618440057s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:11:29.000056 1357309 request.go:752] "Waited before sending request" delay="1.176703433s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:11:39.000180 1357309 request.go:752] "Waited before sending request" delay="1.661072082s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:11:49.199890 1357309 request.go:752] "Waited before sending request" delay="1.680533239s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:11:59.199987 1357309 request.go:752] "Waited before sending request" delay="1.672990297s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:12:09.200092 1357309 request.go:752] "Waited before sending request" delay="1.668604716s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:12:19.400183 1357309 request.go:752] "Waited before sending request" delay="1.625920537s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:12:29.400905 1357309 request.go:752] "Waited before sending request" delay="1.672614161s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:12:39.599926 1357309 request.go:752] "Waited before sending request" delay="1.642161325s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:12:49.600406 1357309 request.go:752] "Waited before sending request" delay="1.558289861s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:12:59.601176 1357309 request.go:752] "Waited before sending request" delay="1.601372986s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:13:09.800967 1357309 request.go:752] "Waited before sending request" delay="1.586705684s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:13:19.801004 1357309 request.go:752] "Waited before sending request" delay="1.606713557s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:13:29.999609 1357309 request.go:752] "Waited before sending request" delay="1.558192886s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:13:39.999750 1357309 request.go:752] "Waited before sending request" delay="1.68920237s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:13:50.000877 1357309 request.go:752] "Waited before sending request" delay="1.691668722s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:14:00.199922 1357309 request.go:752] "Waited before sending request" delay="1.617524803s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:14:10.400487 1357309 request.go:752] "Waited before sending request" delay="1.583883944s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:14:20.600225 1357309 request.go:752] "Waited before sending request" delay="1.635047782s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:14:30.799766 1357309 request.go:752] "Waited before sending request" delay="1.683795872s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:14:41.000861 1357309 request.go:752] "Waited before sending request" delay="1.556659589s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:14:51.200010 1357309 request.go:752] "Waited before sending request" delay="1.697198044s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:15:01.399651 1357309 request.go:752] "Waited before sending request" delay="1.59657765s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:15:11.399767 1357309 request.go:752] "Waited before sending request" delay="1.649401151s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-stxxg"
+I1016 22:15:21.400045 1357309 request.go:752] "Waited before sending request" delay="1.661105432s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:15:31.600033 1357309 request.go:752] "Waited before sending request" delay="1.677105599s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:15:41.600734 1357309 request.go:752] "Waited before sending request" delay="1.580976555s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:15:51.801011 1357309 request.go:752] "Waited before sending request" delay="1.610035521s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:16:02.000822 1357309 request.go:752] "Waited before sending request" delay="1.669253668s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:16:12.000868 1357309 request.go:752] "Waited before sending request" delay="1.534364315s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:16:22.201692 1357309 request.go:752] "Waited before sending request" delay="1.563261725s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:16:32.399966 1357309 request.go:752] "Waited before sending request" delay="1.612336167s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:16:42.601217 1357309 request.go:752] "Waited before sending request" delay="1.694720262s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:16:52.800600 1357309 request.go:752] "Waited before sending request" delay="1.60649208s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:17:03.000720 1357309 request.go:752] "Waited before sending request" delay="1.687233834s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:17:13.002688 1357309 request.go:752] "Waited before sending request" delay="1.497743622s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:17:23.199954 1357309 request.go:752] "Waited before sending request" delay="1.59796975s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:17:33.200649 1357309 request.go:752] "Waited before sending request" delay="1.676931107s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-orders-fdf944d7d-frrpq"
+I1016 22:17:43.399834 1357309 request.go:752] "Waited before sending request" delay="1.650286319s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:17:53.400601 1357309 request.go:752] "Waited before sending request" delay="1.580856086s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:18:03.601969 1357309 request.go:752] "Waited before sending request" delay="1.678168678s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:18:13.800952 1357309 request.go:752] "Waited before sending request" delay="1.610785214s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:18:24.000655 1357309 request.go:752] "Waited before sending request" delay="1.642192711s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:18:34.000892 1357309 request.go:752] "Waited before sending request" delay="1.685079347s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:18:44.199695 1357309 request.go:752] "Waited before sending request" delay="1.683371204s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:18:54.402654 1357309 request.go:752] "Waited before sending request" delay="1.647397144s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:19:04.400261 1357309 request.go:752] "Waited before sending request" delay="1.608267003s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:19:14.402466 1357309 request.go:752] "Waited before sending request" delay="1.687280296s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:19:24.599829 1357309 request.go:752] "Waited before sending request" delay="1.636725511s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-2ff77"
+I1016 22:19:34.601099 1357309 request.go:752] "Waited before sending request" delay="1.370841586s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-repo-server-58d667f4bd-xq4ts"
+I1016 22:19:44.799652 1357309 request.go:752] "Waited before sending request" delay="1.683424016s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:19:54.800961 1357309 request.go:752] "Waited before sending request" delay="1.664446088s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-auth-766b97f5c7-ttqb9"
+I1016 22:20:05.001278 1357309 request.go:752] "Waited before sending request" delay="1.585712043s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+I1016 22:20:15.199820 1357309 request.go:752] "Waited before sending request" delay="1.65430221s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-7dtg6"
+I1016 22:20:25.203548 1357309 request.go:752] "Waited before sending request" delay="1.688871475s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-api-gateway-847d4f8686-stxxg"
+I1016 22:20:35.400074 1357309 request.go:752] "Waited before sending request" delay="1.56323613s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-notifications-6c869f8789-s6bdk"
+I1016 22:20:45.400184 1357309 request.go:752] "Waited before sending request" delay="1.646909115s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-mysql-0"
+I1016 22:20:55.400711 1357309 request.go:752] "Waited before sending request" delay="1.629450917s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-catalog-767df84554-n9twx"
+There are pending pods in node "aks-system-62522726-vmss000000" when an error occurred: [error when waiting for pod "sa-platform-api-gateway-847d4f8686-2ff77" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-mysql-0" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-auth-766b97f5c7-ttqb9" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-api-gateway-847d4f8686-7dtg6" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-orders-fdf944d7d-frrpq" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-notifications-6c869f8789-s6bdk" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-catalog-767df84554-n9twx" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "argocd-repo-server-58d667f4bd-xq4ts" in namespace "argocd" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-api-gateway-847d4f8686-stxxg" in namespace "sa-p5" to terminate: context deadline exceeded]
+pod/argocd-repo-server-58d667f4bd-xq4ts
+pod/cilium-operator-7664488f9b-f7w7r
+pod/sa-platform-api-gateway-847d4f8686-2ff77
+pod/sa-platform-api-gateway-847d4f8686-7dtg6
+pod/sa-platform-api-gateway-847d4f8686-stxxg
+pod/sa-platform-auth-766b97f5c7-ttqb9
+pod/sa-platform-catalog-767df84554-n9twx
+pod/sa-platform-mysql-0
+pod/sa-platform-notifications-6c869f8789-s6bdk
+pod/sa-platform-orders-fdf944d7d-frrpq
+error: unable to drain node "aks-system-62522726-vmss000000" due to error: [error when waiting for pod "sa-platform-api-gateway-847d4f8686-2ff77" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-mysql-0" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-auth-766b97f5c7-ttqb9" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-api-gateway-847d4f8686-7dtg6" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-orders-fdf944d7d-frrpq" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-notifications-6c869f8789-s6bdk" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-catalog-767df84554-n9twx" in namespace "sa-p5" to terminate: context deadline exceeded, error when waiting for pod "argocd-repo-server-58d667f4bd-xq4ts" in namespace "argocd" to terminate: context deadline exceeded, error when waiting for pod "sa-platform-api-gateway-847d4f8686-stxxg" in namespace "sa-p5" to terminate: context deadline exceeded], continuing command...
+There are pending nodes to be drained:
+ aks-system-62522726-vmss000000
+error when waiting for pod "sa-platform-api-gateway-847d4f8686-2ff77" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-mysql-0" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-auth-766b97f5c7-ttqb9" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-api-gateway-847d4f8686-7dtg6" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-orders-fdf944d7d-frrpq" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-notifications-6c869f8789-s6bdk" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-catalog-767df84554-n9twx" in namespace "sa-p5" to terminate: context deadline exceeded
+error when waiting for pod "argocd-repo-server-58d667f4bd-xq4ts" in namespace "argocd" to terminate: context deadline exceeded
+error when waiting for pod "sa-platform-api-gateway-847d4f8686-stxxg" in namespace "sa-p5" to terminate: context deadline exceeded
+2026-10-17T04:21:07Z [ERROR] Falló la línea 106: kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout="$DRAIN_TIMEOUT"
+2026-10-17T04:21:07Z [INFO]  Cierre: kubectl uncordon aks-system-62522726-vmss000000
+node/aks-system-62522726-vmss000000 uncordoned

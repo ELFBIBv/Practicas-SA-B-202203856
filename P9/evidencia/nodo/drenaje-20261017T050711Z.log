@@ -1,0 +1,158 @@
+2026-10-17T05:07:11Z [INFO]  Evidencia: P9/evidencia/nodo/drenaje-20261017T050711Z.log (zona horaria: UTC; contexto: aks-sa-p9).
+
+2026-10-17T05:07:11Z [STAGE] ===== 0. Prerrequisitos y ubicación de réplicas ANTES del drenaje =====
+NAME                             STATUS   ROLES    AGE    VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+aks-system-62522726-vmss000000   Ready    <none>   172m   v1.36.4   10.224.0.5    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-62522726-vmss000001   Ready    <none>   172m   v1.36.4   10.224.0.4    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+NAME                        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+sa-platform-api-gateway     1               N/A               4                     160m
+sa-platform-auth            1               N/A               1                     160m
+sa-platform-catalog         1               N/A               1                     160m
+sa-platform-nats            N/A             1                 1                     160m
+sa-platform-notifications   1               N/A               1                     160m
+sa-platform-orders          1               N/A               1                     160m
+POD                                          NODO                             LISTO
+sa-platform-notifications-6c869f8789-d64q6   aks-system-62522726-vmss000000   True
+sa-platform-mysql-0                          aks-system-62522726-vmss000000   True
+sa-platform-orders-fdf944d7d-67v98           aks-system-62522726-vmss000000   True
+sa-platform-api-gateway-847d4f8686-cmq4z     aks-system-62522726-vmss000000   True
+sa-platform-api-gateway-847d4f8686-qtrgw     aks-system-62522726-vmss000000   True
+sa-platform-auth-766b97f5c7-cwfd9            aks-system-62522726-vmss000000   True
+sa-platform-catalog-767df84554-dsbhs         aks-system-62522726-vmss000000   True
+sa-platform-mongodb-0                        aks-system-62522726-vmss000001   True
+sa-platform-catalog-767df84554-gm9dp         aks-system-62522726-vmss000001   True
+sa-platform-api-gateway-847d4f8686-drjfr     aks-system-62522726-vmss000001   True
+sa-platform-auth-766b97f5c7-xz2ff            aks-system-62522726-vmss000001   True
+sa-platform-nats-0                           aks-system-62522726-vmss000001   True
+sa-platform-api-gateway-847d4f8686-ls4fj     aks-system-62522726-vmss000001   True
+sa-platform-notifications-6c869f8789-kxzkb   aks-system-62522726-vmss000001   True
+sa-platform-api-gateway-847d4f8686-gmt9s     aks-system-62522726-vmss000001   True
+sa-platform-orders-fdf944d7d-gfx6x           aks-system-62522726-vmss000001   True
+2026-10-17T05:07:15Z [INFO]  Distribución verificada: todo workload replicado ocupa >= 2 nodos.
+2026-10-17T05:07:16Z [INFO]  Nodo a drenar: aks-system-62522726-vmss000001. Pods de sa-p5 en ese nodo:
+    sa-platform-api-gateway-847d4f8686-drjfr
+    sa-platform-api-gateway-847d4f8686-gmt9s
+    sa-platform-api-gateway-847d4f8686-ls4fj
+    sa-platform-auth-766b97f5c7-xz2ff
+    sa-platform-catalog-767df84554-gm9dp
+    sa-platform-mongodb-0
+    sa-platform-nats-0
+    sa-platform-notifications-6c869f8789-kxzkb
+    sa-platform-orders-fdf944d7d-gfx6x
+
+2026-10-17T05:07:18Z [STAGE] ===== 1. Sondeo continuo de http://57.156.59.37 (/ready /api/catalog/health /api/orders/health, cada 1s) =====
+2026-10-17T05:07:18Z [INFO]  Sondeo en segundo plano (pid 1420150) -> P9/evidencia/nodo/sondeo-20261017T050718Z.csv. Línea base de 60s...
+
+2026-10-17T05:08:18Z [STAGE] ===== 2. Drenaje de aks-system-62522726-vmss000001 (respeta PDB) =====
+2026-10-17T05:08:18Z [INFO]  DRENAJE_INICIO=2026-10-17T05:08:18Z
+node/aks-system-62522726-vmss000001 cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/azure-cns-2bl7l, kube-system/azure-ip-masq-agent-t6hrg, kube-system/cilium-4gl72, kube-system/cloud-node-manager-76t9g, kube-system/csi-azuredisk-node-cmkbl, kube-system/csi-azurefile-node-2nj52, velero/node-agent-n5sz4
+evicting pod argocd/argocd-application-controller-0
+evicting pod argo-rollouts/argo-rollouts-866c644d5-fp5lp
+evicting pod argocd/argocd-server-64954b5c55-c52z9
+evicting pod velero/velero-b67898d66-pqp4q
+evicting pod kube-system/azure-wi-webhook-controller-manager-54b5965785-8svbw
+evicting pod argo-rollouts/argo-rollouts-866c644d5-x7k57
+evicting pod kube-system/coredns-76df789c68-ndd6g
+evicting pod argocd/argocd-applicationset-controller-6767bff4b5-lxshk
+evicting pod kube-system/cilium-operator-7664488f9b-ss2dw
+evicting pod kube-system/coredns-76df789c68-swsgj
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-drjfr
+evicting pod kube-system/konnectivity-agent-autoscaler-747595f466-glk8m
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-gmt9s
+evicting pod kyverno/kyverno-reports-controller-5d4d7cf5c5-jvzgb
+evicting pod kube-system/coredns-autoscaler-548c6d85c6-tzks4
+evicting pod argocd/argocd-redis-c4fdd947-gvxp4
+evicting pod sa-p5/sa-platform-api-gateway-847d4f8686-ls4fj
+evicting pod argocd/argocd-repo-server-58d667f4bd-tpd4r
+evicting pod sa-p5/sa-platform-auth-766b97f5c7-xz2ff
+evicting pod kube-system/metrics-server-5d77586894-ng499
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+evicting pod kube-system/konnectivity-agent-89d7cd48-fkpk8
+evicting pod kube-system/sealed-secrets-controller-86df89c69c-p5r6m
+evicting pod kube-system/konnectivity-agent-89d7cd48-x7szf
+evicting pod sa-p5/sa-platform-mongodb-0
+evicting pod sa-p5/sa-platform-catalog-767df84554-gm9dp
+evicting pod kyverno/kyverno-admission-controller-85f8d77fcc-mhlb4
+evicting pod sa-p5/sa-platform-orders-fdf944d7d-gfx6x
+evicting pod sa-p5/sa-platform-nats-0
+evicting pod sa-p5/sa-platform-notifications-6c869f8789-kxzkb
+evicting pod velero/p9-data-restore-9wrvj
+error when evicting pods/"coredns-76df789c68-ndd6g" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+I1016 23:08:22.269559 1421937 request.go:752] "Waited before sending request" delay="1.00016666s" reason="client-side throttling, not priority and fairness" verb="POST" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/argocd/pods/argocd-redis-c4fdd947-gvxp4/eviction"
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/cilium-operator-7664488f9b-ss2dw evicted
+error when evicting pods/"konnectivity-agent-89d7cd48-x7szf" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/konnectivity-agent-autoscaler-747595f466-glk8m evicted
+pod/coredns-autoscaler-548c6d85c6-tzks4 evicted
+pod/argocd-server-64954b5c55-c52z9 evicted
+pod/argo-rollouts-866c644d5-x7k57 evicted
+pod/argo-rollouts-866c644d5-fp5lp evicted
+pod/azure-wi-webhook-controller-manager-54b5965785-8svbw evicted
+pod/argocd-application-controller-0 evicted
+pod/argocd-redis-c4fdd947-gvxp4 evicted
+pod/argocd-applicationset-controller-6767bff4b5-lxshk evicted
+pod/sealed-secrets-controller-86df89c69c-p5r6m evicted
+pod/sa-platform-api-gateway-847d4f8686-drjfr evicted
+pod/sa-platform-mongodb-0 evicted
+pod/kyverno-admission-controller-85f8d77fcc-mhlb4 evicted
+pod/argocd-repo-server-58d667f4bd-tpd4r evicted
+pod/sa-platform-api-gateway-847d4f8686-gmt9s evicted
+pod/kyverno-reports-controller-5d4d7cf5c5-jvzgb evicted
+pod/velero-b67898d66-pqp4q evicted
+evicting pod kube-system/coredns-76df789c68-ndd6g
+pod/metrics-server-5d77586894-ng499 evicted
+pod/coredns-76df789c68-swsgj evicted
+pod/p9-data-restore-9wrvj evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/sa-platform-api-gateway-847d4f8686-ls4fj evicted
+I1016 23:08:32.385986 1421937 request.go:752] "Waited before sending request" delay="2.887598223s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://aks-sa-p9-jthogmmt.hcp.chilecentral.azmk8s.io:443/api/v1/namespaces/sa-p5/pods/sa-platform-nats-0"
+pod/sa-platform-orders-fdf944d7d-gfx6x evicted
+evicting pod kube-system/konnectivity-agent-89d7cd48-x7szf
+error when evicting pods/"konnectivity-agent-89d7cd48-x7szf" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/sa-platform-notifications-6c869f8789-kxzkb evicted
+pod/sa-platform-catalog-767df84554-gm9dp evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+pod/sa-platform-nats-0 evicted
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/konnectivity-agent-89d7cd48-x7szf
+pod/coredns-76df789c68-ndd6g evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/konnectivity-agent-89d7cd48-fkpk8 evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/sa-platform-auth-766b97f5c7-xz2ff evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+pod/konnectivity-agent-89d7cd48-x7szf evicted
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+error when evicting pods/"metrics-server-5d77586894-gvslt" -n "kube-system" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+evicting pod kube-system/metrics-server-5d77586894-gvslt
+pod/metrics-server-5d77586894-gvslt evicted
+node/aks-system-62522726-vmss000001 drained
+2026-10-17T05:09:44Z [INFO]  DRENAJE_FIN=2026-10-17T05:09:44Z (todos los Pods desalojables fueron desalojados)
+
+2026-10-17T05:09:44Z [STAGE] ===== 3. Reprogramación y recuperación =====
+timed out waiting for the condition on deployments/sa-platform-auth
+timed out waiting for the condition on deployments/sa-platform-catalog
+timed out waiting for the condition on deployments/sa-platform-notifications
+timed out waiting for the condition on deployments/sa-platform-orders
+2026-10-17T05:19:44Z [ERROR] Falló la línea 111: kubectl -n "$NS" wait --for=condition=Available deployment --all --timeout=10m
+2026-10-17T05:19:44Z [INFO]  Cierre: kubectl uncordon aks-system-62522726-vmss000001
+node/aks-system-62522726-vmss000001 uncordoned
