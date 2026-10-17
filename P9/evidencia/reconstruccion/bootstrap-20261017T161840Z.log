@@ -1,0 +1,1360 @@
+2026-10-17T16:18:40Z [INFO]  Bootstrap P9 'all' iniciado (commit db7d388). RTO_INICIO=2026-10-17T16:18:40Z
+2026-10-17T16:18:41Z [INFO]  Terraform 1.16.3, azure-cli 2.90.0.
+
+2026-10-17T16:18:42Z [STAGE] ===== 1. Backend remoto del estado de Terraform =====
+2026-10-17T16:18:43Z [INFO]  Backend de estado: suscripción=fd84b98d… rg=rg-p9-tfstate cuenta=stp9tfc01f715c2e19 contenedor=tfstate región=chilecentral auth=auto
+2026-10-17T16:18:45Z [INFO]  Proveedor Microsoft.Storage: ya registrado.
+2026-10-17T16:18:47Z [INFO]  Proveedor Microsoft.KeyVault: ya registrado.
+2026-10-17T16:18:50Z [INFO]  Resource group rg-p9-tfstate: ya existe (no se modifica).
+2026-10-17T16:18:53Z [INFO]  Storage account stp9tfc01f715c2e19: ya existe (no se recrea).
+2026-10-17T16:18:53Z [INFO]  Asegurando versionado de blobs y soft delete (30 días)...
+2026-10-17T16:19:03Z [INFO]  Contenedor tfstate: ya existe (no se modifica).
+2026-10-17T16:19:08Z [INFO]  Candado CanNotDelete p9-tfstate-no-delete: ya existe.
+2026-10-17T16:19:08Z [INFO]  Backend remoto listo.
+2026-10-17T16:19:11Z [INFO]  Autenticación del backend: azuread.
+2026-10-17T16:19:20Z [INFO]  Identidades del Key Vault: operador=efa01ad3… custodio=efa01ad3… (custodio conservado del vault existente)
+
+2026-10-17T16:19:20Z [STAGE] ===== 2. Etapa 00-persistent (Velero: storage account + UAMI) =====
+2026-10-17T16:19:20Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/00-persistent.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Installing hashicorp/azurerm v5.7.0...
+- Installed hashicorp/azurerm v5.7.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+2026-10-17T16:19:44Z [INFO]  [00-persistent] estado remoto accesible: 9 recursos en p9/00-persistent.tfstate.
+Acquiring state lock. This may take a few moments...
+data.azurerm_client_config.current: Reading...
+data.azurerm_resource_group.persistent: Reading...
+data.azurerm_client_config.current: Read complete after 0s [id=<base64-redactado>]
+data.azurerm_resource_group.persistent: Read complete after 3s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate]
+azurerm_user_assigned_identity.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero]
+azurerm_key_vault.sealed_secrets_custody: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856]
+azurerm_storage_account.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19]
+azurerm_role_assignment.velero_storage: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+azurerm_storage_container.velero_backups: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19/blobServices/default/containers/velero-backups]
+azurerm_role_assignment.sealed_secrets_custodian: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+azurerm_role_assignment.sealed_secrets_bootstrap: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.KeyVault/vaults/kv-sa-p9-202203856/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+Releasing state lock. This may take a few moments...
+2026-10-17T16:20:06Z [INFO]  [00-persistent] plan sin cambios: la infraestructura ya converge con el código.
+
+2026-10-17T16:20:06Z [STAGE] ===== 3. Etapa 01-cluster (resource group + AKS) =====
+2026-10-17T16:20:06Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/01-cluster.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing modules...
+- cluster in ../modules/cluster
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Installing hashicorp/azurerm v5.6.0...
+- Installed hashicorp/azurerm v5.6.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+2026-10-17T16:20:27Z [INFO]  [01-cluster] estado remoto accesible: 0 recursos en p9/01-cluster.tfstate.
+Acquiring state lock. This may take a few moments...
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # module.cluster.azurerm_kubernetes_cluster.this will be created
+  + resource "azurerm_kubernetes_cluster" "this" {
+      + ai_toolchain_operator_enabled       = false
+      + current_kubernetes_version          = (known after apply)
+      + dns_prefix                          = "aks-sa-p9"
+      + fqdn                                = (known after apply)
+      + http_application_routing_zone_name  = (known after apply)
+      + id                                  = (known after apply)
+      + kube_admin_config                   = (sensitive value)
+      + kube_admin_config_raw               = (sensitive value)
+      + kube_config                         = (sensitive value)
+      + kube_config_raw                     = (sensitive value)
+      + kubernetes_version                  = (known after apply)
+      + local_account_disabled              = false
+      + location                            = "chilecentral"
+      + name                                = "aks-sa-p9"
+      + node_os_upgrade_channel             = "NodeImage"
+      + node_resource_group                 = "rg-p9-aks-nodes"
+      + node_resource_group_id              = (known after apply)
+      + oidc_issuer_enabled                 = true
+      + oidc_issuer_url                     = (known after apply)
+      + portal_fqdn                         = (known after apply)
+      + private_cluster_enabled             = false
+      + private_cluster_public_fqdn_enabled = false
+      + private_dns_zone_id                 = (known after apply)
+      + private_fqdn                        = (known after apply)
+      + resource_group_name                 = "rg-p9-aks"
+      + role_based_access_control_enabled   = true
+      + run_command_enabled                 = true
+      + sku_tier                            = "Free"
+      + support_plan                        = "KubernetesOfficial"
+      + tags                                = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+      + workload_identity_enabled           = true
+
+      + auto_scaler_profile (known after apply)
+
+      + bootstrap_profile (known after apply)
+
+      + default_node_pool {
+          + kubelet_disk_type           = (known after apply)
+          + max_pods                    = (known after apply)
+          + name                        = "system"
+          + node_count                  = 2
+          + node_labels                 = (known after apply)
+          + orchestrator_version        = (known after apply)
+          + os_disk_size_gb             = 64
+          + os_disk_type                = "Managed"
+          + os_sku                      = (known after apply)
+          + scale_down_mode             = "Delete"
+          + temporary_name_for_rotation = "tmpsystem"
+          + type                        = "VirtualMachineScaleSets"
+          + ultra_ssd_enabled           = false
+          + vm_size                     = "Standard_DS2_v2"
+          + workload_runtime            = (known after apply)
+
+          + upgrade_settings {
+              + max_surge = "1"
+            }
+        }
+
+      + identity {
+          + identity_ids = (known after apply)
+          + principal_id = (known after apply)
+          + tenant_id    = (known after apply)
+          + type         = "UserAssigned"
+        }
+
+      + kubelet_identity (known after apply)
+
+      + network_profile {
+          + dns_service_ip      = (known after apply)
+          + ip_versions         = (known after apply)
+          + load_balancer_sku   = "standard"
+          + network_data_plane  = "cilium"
+          + network_mode        = (known after apply)
+          + network_plugin      = "azure"
+          + network_plugin_mode = "overlay"
+          + network_policy      = "cilium"
+          + outbound_type       = "loadBalancer"
+          + pod_cidr            = (known after apply)
+          + pod_cidrs           = (known after apply)
+          + service_cidr        = (known after apply)
+          + service_cidrs       = (known after apply)
+
+          + load_balancer_profile {
+              + backend_pool_type           = "NodeIPConfiguration"
+              + effective_outbound_ips      = (known after apply)
+              + idle_timeout_in_minutes     = 30
+              + managed_outbound_ip_count   = (known after apply)
+              + managed_outbound_ipv6_count = (known after apply)
+              + outbound_ip_address_ids     = (known after apply)
+              + outbound_ports_allocated    = 0
+            }
+
+          + nat_gateway_profile (known after apply)
+        }
+
+      + node_provisioning_profile {
+          + default_node_pools = "Auto"
+          + mode               = "Manual"
+        }
+
+      + windows_profile (known after apply)
+    }
+
+  # module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0] will be created
+  + resource "azurerm_kubernetes_cluster_node_pool" "spare" {
+      + id                    = (known after apply)
+      + kubelet_disk_type     = (known after apply)
+      + kubernetes_cluster_id = (known after apply)
+      + max_pods              = (known after apply)
+      + mode                  = "User"
+      + name                  = "spare"
+      + node_count            = 1
+      + node_image_version    = (known after apply)
+      + node_labels           = (known after apply)
+      + orchestrator_version  = (known after apply)
+      + os_disk_size_gb       = 64
+      + os_disk_type          = "Managed"
+      + os_sku                = (known after apply)
+      + os_type               = "Linux"
+      + priority              = "Regular"
+      + scale_down_mode       = "Delete"
+      + spot_max_price        = -1
+      + tags                  = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+      + ultra_ssd_enabled     = false
+      + vm_size               = "Standard_D2s_v4"
+    }
+
+  # module.cluster.azurerm_public_ip.gateway will be created
+  + resource "azurerm_public_ip" "gateway" {
+      + allocation_method       = "Static"
+      + ddos_protection_mode    = "VirtualNetworkInherited"
+      + fqdn                    = (known after apply)
+      + id                      = (known after apply)
+      + idle_timeout_in_minutes = 4
+      + ip_address              = (known after apply)
+      + ip_version              = "IPv4"
+      + location                = "chilecentral"
+      + name                    = "pip-sa-p9-gateway"
+      + resource_group_name     = "rg-p9-aks"
+      + sku                     = "Standard"
+      + sku_tier                = "Regional"
+      + tags                    = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+    }
+
+  # module.cluster.azurerm_resource_group.aks will be created
+  + resource "azurerm_resource_group" "aks" {
+      + id       = (known after apply)
+      + location = "chilecentral"
+      + name     = "rg-p9-aks"
+      + tags     = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+    }
+
+  # module.cluster.azurerm_role_assignment.control_plane_pip will be created
+  + resource "azurerm_role_assignment" "control_plane_pip" {
+      + condition_version                = (known after apply)
+      + id                               = (known after apply)
+      + name                             = (known after apply)
+      + principal_id                     = (known after apply)
+      + principal_type                   = (known after apply)
+      + role_definition_id               = (known after apply)
+      + role_definition_name             = "Network Contributor"
+      + scope                            = (known after apply)
+      + skip_service_principal_aad_check = (known after apply)
+    }
+
+  # module.cluster.azurerm_user_assigned_identity.control_plane will be created
+  + resource "azurerm_user_assigned_identity" "control_plane" {
+      + client_id           = (known after apply)
+      + id                  = (known after apply)
+      + location            = "chilecentral"
+      + name                = "id-aks-sa-p9"
+      + principal_id        = (known after apply)
+      + resource_group_name = "rg-p9-aks"
+      + tags                = {
+          + "administrado"   = "terraform"
+          + "ciclo-de-vida"  = "desechable"
+          + "practica"       = "p9"
+          + "reconstruye-de" = "P9/scripts/bootstrap.sh"
+        }
+      + tenant_id           = (known after apply)
+    }
+
+Plan: 6 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + cluster_name           = "aks-sa-p9"
+  + gateway_public_ip      = (known after apply)
+  + gateway_public_ip_name = "pip-sa-p9-gateway"
+  + kubernetes_version     = (known after apply)
+  + node_resource_group    = "rg-p9-aks-nodes"
+  + oidc_issuer_url        = (known after apply)
+  + resource_group_name    = "rg-p9-aks"
+Releasing state lock. This may take a few moments...
+2026-10-17T16:20:39Z [INFO]  [01-cluster] plan con cambios (se aplicará exactamente este plan).
+Acquiring state lock. This may take a few moments...
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+container_name = "velero-backups"
+key_vault_name = "kv-sa-p9-202203856"
+key_vault_uri = "https://kv-sa-p9-202203856.vault.azure.net/"
+resource_group_name = "rg-p9-tfstate"
+storage_account_name = "stp9veloc01f715c2e19"
+velero_client_id = "<guid-redactado>"
+velero_principal_id = "<guid-redactado>"
+velero_tenant_id = "<guid-redactado>"
+velero_uami_id = "/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero"
+Acquiring state lock. This may take a few moments...
+module.cluster.azurerm_resource_group.aks: Creating...
+module.cluster.azurerm_resource_group.aks: Still creating... [00m10s elapsed]
+module.cluster.azurerm_resource_group.aks: Still creating... [00m20s elapsed]
+module.cluster.azurerm_resource_group.aks: Creation complete after 27s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks]
+module.cluster.azurerm_user_assigned_identity.control_plane: Creating...
+module.cluster.azurerm_public_ip.gateway: Creating...
+module.cluster.azurerm_public_ip.gateway: Creation complete after 5s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.Network/publicIPAddresses/pip-sa-p9-gateway]
+module.cluster.azurerm_user_assigned_identity.control_plane: Still creating... [00m10s elapsed]
+module.cluster.azurerm_user_assigned_identity.control_plane: Still creating... [00m20s elapsed]
+module.cluster.azurerm_user_assigned_identity.control_plane: Still creating... [00m30s elapsed]
+module.cluster.azurerm_user_assigned_identity.control_plane: Creation complete after 37s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-aks-sa-p9]
+module.cluster.azurerm_role_assignment.control_plane_pip: Creating...
+module.cluster.azurerm_role_assignment.control_plane_pip: Still creating... [00m10s elapsed]
+module.cluster.azurerm_role_assignment.control_plane_pip: Still creating... [00m20s elapsed]
+module.cluster.azurerm_role_assignment.control_plane_pip: Still creating... [00m30s elapsed]
+module.cluster.azurerm_role_assignment.control_plane_pip: Creation complete after 32s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.Network/publicIPAddresses/pip-sa-p9-gateway/providers/Microsoft.Authorization/roleAssignments/<guid-redactado>]
+module.cluster.azurerm_kubernetes_cluster.this: Creating...
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [00m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [00m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [00m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [00m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [00m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [01m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [02m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [03m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [04m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [04m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [04m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [04m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Still creating... [04m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster.this: Creation complete after 4m42s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Creating...
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [00m50s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m00s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m10s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m20s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m30s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Still creating... [01m40s elapsed]
+module.cluster.azurerm_kubernetes_cluster_node_pool.spare[0]: Creation complete after 1m44s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9/agentPools/spare]
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 6 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+cluster_name = "aks-sa-p9"
+gateway_public_ip = "57.156.71.88"
+gateway_public_ip_name = "pip-sa-p9-gateway"
+kubernetes_version = "1.36.4"
+node_resource_group = "rg-p9-aks-nodes"
+oidc_issuer_url = "https://chilecentral.oic.prod-aks.azure.com/<guid-redactado>/<guid-redactado>/"
+resource_group_name = "rg-p9-aks"
+
+2026-10-17T16:29:12Z [STAGE] ===== 4. Credenciales del clúster y nodos Ready =====
+2026-10-17T16:29:14Z [INFO]  kubeconfig de P9: /home/chamba/.kube/p9-aks-sa-p9.config (contexto aks-sa-p9).
+2026-10-17T16:29:14Z [INFO]  Esperando nodos Ready...
+node/aks-spare-25256196-vmss000000 condition met
+node/aks-system-23878703-vmss000000 condition met
+node/aks-system-23878703-vmss000001 condition met
+NAME                             STATUS   ROLES    AGE     VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+aks-spare-25256196-vmss000000    Ready    <none>   65s     v1.36.4   10.224.0.6    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-23878703-vmss000000   Ready    <none>   3m32s   v1.36.4   10.224.0.5    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+aks-system-23878703-vmss000001   Ready    <none>   3m32s   v1.36.4   10.224.0.4    <none>        Ubuntu 24.04.5 LTS   6.8.0-1070-azure (amd64)   containerd://2.3.6-1
+
+2026-10-17T16:29:17Z [STAGE] ===== 5. Continuidad de secretos: llave de Sealed Secrets =====
+2026-10-17T16:29:19Z [restore-sskey] inicio: vault=kv-sa-p9-202203856 cluster=aks-sa-p9
+2026-10-17T16:29:21Z [restore-sskey] keyring válido: 1 llave(s); huella esperada 7DD46ABC19BE6499 presente
+secret/sealed-secrets-keyjcfcn serverside-applied
+2026-10-17T16:29:26Z [restore-sskey] fin: llaves activas en kube-system = sealed-secrets-keyjcfcn 
+
+2026-10-17T16:29:26Z [STAGE] ===== 6. Etapa 02-platform (tenant + ArgoCD + app-of-apps + Velero) =====
+2026-10-17T16:29:26Z [INFO]  terraform init contra azurerm://stp9tfc01f715c2e19/tfstate/p9/02-platform.tfstate...
+Initializing the backend...
+
+Successfully configured the backend "azurerm"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing modules...
+- tenant in ../modules/tenant
+- argocd in ../modules/argocd
+- seed in ../modules/app-of-apps-seed
+- velero in modules/velero
+
+Initializing provider plugins...
+- Reusing previous version of hashicorp/kubernetes from the dependency lock file
+- Reusing previous version of hashicorp/azurerm from the dependency lock file
+- Reusing previous version of hashicorp/helm from the dependency lock file
+- Installing hashicorp/kubernetes v3.2.1...
+- Installed hashicorp/kubernetes v3.2.1 (signed by HashiCorp)
+- Installing hashicorp/azurerm v5.6.0...
+- Installed hashicorp/azurerm v5.6.0 (signed by HashiCorp)
+- Installing hashicorp/helm v3.3.0...
+- Installed hashicorp/helm v3.3.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+2026-10-17T16:29:54Z [INFO]  [02-platform] estado remoto accesible: 17 recursos en p9/02-platform.tfstate.
+Acquiring state lock. This may take a few moments...
+data.azurerm_user_assigned_identity.velero: Reading...
+data.azurerm_kubernetes_cluster.this: Reading...
+data.azurerm_client_config.current: Reading...
+data.azurerm_client_config.current: Read complete after 0s [id=<base64-redactado>]
+data.azurerm_storage_account.velero: Reading...
+data.azurerm_storage_account.velero: Read complete after 2s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.Storage/storageAccounts/stp9veloc01f715c2e19]
+data.azurerm_kubernetes_cluster.this: Read complete after 4s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-aks/providers/Microsoft.ContainerService/managedClusters/aks-sa-p9]
+module.tenant.kubernetes_namespace_v1.sa_platform: Refreshing state... [id=sa-p5]
+module.argocd.helm_release.argocd: Refreshing state... [id=argocd]
+module.tenant.kubernetes_service_account_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator]
+module.tenant.kubernetes_resource_quota_v1.platform: Refreshing state... [id=sa-p5/sa-p5-platform-quota]
+module.tenant.kubernetes_limit_range_v1.platform: Refreshing state... [id=sa-p5/sa-p5-platform-limits]
+module.tenant.kubernetes_service_account_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_role_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_role_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator]
+module.tenant.kubernetes_role_binding_v1.viewer: Refreshing state... [id=sa-p5/sa-platform-viewer-binding]
+module.tenant.kubernetes_role_binding_v1.operator: Refreshing state... [id=sa-p5/sa-platform-operator-binding]
+module.seed.helm_release.seed: Refreshing state... [id=p9-app-of-apps]
+data.azurerm_user_assigned_identity.velero: Read complete after 7s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero]
+module.velero.azurerm_federated_identity_credential.velero: Refreshing state... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero/federatedIdentityCredentials/fic-velero-server]
+module.velero.helm_release.velero: Refreshing state... [id=velero]
+
+Note: Objects have changed outside of Terraform
+
+Terraform detected the following changes made outside of Terraform since the
+last "terraform apply" which may have affected this plan:
+
+  # module.argocd.helm_release.argocd has been deleted
+  - resource "helm_release" "argocd" {
+        id                         = "argocd"
+      - metadata                   = {
+          - app_version    = "v3.5.3" -> null
+            name           = "argocd"
+            # (8 unchanged attributes hidden)
+        } -> null
+        name                       = "argocd"
+      - namespace                  = "argocd" -> null
+      - set_wo                     = (write-only attribute) -> null
+        # (28 unchanged attributes hidden)
+    }
+
+  # module.tenant.kubernetes_namespace_v1.sa_platform has been deleted
+  - resource "kubernetes_namespace_v1" "sa_platform" {
+        id                               = "sa-p5"
+        # (1 unchanged attribute hidden)
+
+      - metadata {
+          - name             = "sa-p5" -> null
+            # (6 unchanged attributes hidden)
+        }
+    }
+
+  # module.tenant.kubernetes_resource_quota_v1.platform has been deleted
+  - resource "kubernetes_resource_quota_v1" "platform" {
+        id = "sa-p5/sa-p5-platform-quota"
+
+      - metadata {
+          - name             = "sa-p5-platform-quota" -> null
+            # (7 unchanged attributes hidden)
+        }
+
+        # (1 unchanged block hidden)
+    }
+
+  # module.tenant.kubernetes_role_v1.operator has been deleted
+  - resource "kubernetes_role_v1" "operator" {
+        id = "sa-p5/sa-platform-operator"
+
+      - metadata {
+          - name             = "sa-platform-operator" -> null
+            # (7 unchanged attributes hidden)
+        }
+
+        # (4 unchanged blocks hidden)
+    }
+
+  # module.tenant.kubernetes_role_v1.viewer has been deleted
+  - resource "kubernetes_role_v1" "viewer" {
+        id = "sa-p5/sa-platform-viewer"
+
+      - metadata {
+          - name             = "sa-platform-viewer" -> null
+            # (7 unchanged attributes hidden)
+        }
+
+        # (4 unchanged blocks hidden)
+    }
+
+  # module.tenant.kubernetes_service_account_v1.operator has been deleted
+  - resource "kubernetes_service_account_v1" "operator" {
+        id                              = "sa-p5/sa-platform-operator"
+        # (2 unchanged attributes hidden)
+
+      - metadata {
+          - name             = "sa-platform-operator" -> null
+            # (7 unchanged attributes hidden)
+        }
+    }
+
+  # module.tenant.kubernetes_service_account_v1.viewer has been deleted
+  - resource "kubernetes_service_account_v1" "viewer" {
+        id                              = "sa-p5/sa-platform-viewer"
+        # (2 unchanged attributes hidden)
+
+      - metadata {
+          - name             = "sa-platform-viewer" -> null
+            # (7 unchanged attributes hidden)
+        }
+    }
+
+  # module.velero.helm_release.velero has been deleted
+  - resource "helm_release" "velero" {
+        id                         = "velero"
+      - metadata                   = {
+          - app_version    = "1.18.2" -> null
+            name           = "velero"
+            # (8 unchanged attributes hidden)
+        } -> null
+        name                       = "velero"
+      - set_wo                     = (write-only attribute) -> null
+        # (29 unchanged attributes hidden)
+    }
+
+
+Unless you have made equivalent changes to your configuration, or ignored the
+relevant attributes using ignore_changes, the following plan may include
+actions to undo or respond to these changes.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+  ~ update in-place
+
+Terraform will perform the following actions:
+
+  # module.argocd.helm_release.argocd will be created
+  + resource "helm_release" "argocd" {
+      + atomic                     = false
+      + chart                      = "argo-cd"
+      + cleanup_on_fail            = true
+      + create_namespace           = true
+      + dependency_update          = false
+      + disable_crd_hooks          = false
+      + disable_openapi_validation = false
+      + disable_webhooks           = false
+      + force_update               = false
+      + id                         = (known after apply)
+      + lint                       = false
+      + max_history                = 0
+      + metadata                   = (known after apply)
+      + name                       = "argocd"
+      + namespace                  = "argocd"
+      + pass_credentials           = false
+      + recreate_pods              = false
+      + render_subchart_notes      = true
+      + replace                    = false
+      + repository                 = "https://argoproj.github.io/argo-helm"
+      + reset_values               = false
+      + reuse_values               = false
+      + set_wo                     = (write-only attribute)
+      + skip_crds                  = false
+      + status                     = "deployed"
+      + take_ownership             = false
+      + timeout                    = 900
+      + upgrade_install            = true
+      + values                     = [
+          + <<-EOT
+                "configs":
+                  "cm":
+                    "resource.customizations.health.argoproj.io_Application": |
+                      -- Health de una Application hija, visto por la raiz. No basta con copiar
+                      -- status.health: los hooks y los recursos Missing no cuentan ahi (H5), asi que
+                      -- una hija con su Job de restauracion en curso ya se ve Healthy.
+                      -- Fuente: P9/docs/diseno-sync-waves.md §3.1.
+                      local hs = { status = "Progressing", message = "Esperando la primera reconciliacion" }
+                      if obj.status == nil then
+                        return hs
+                      end
+                      local op = obj.status.operationState
+                      if op ~= nil then
+                        -- Mientras reintenta con backoff, la fase sigue en Running.
+                        if op.phase == "Running" or op.phase == "Terminating" then
+                          hs.message = "Sync en curso: " .. (op.message or "")
+                          return hs
+                        end
+                        if op.phase == "Failed" or op.phase == "Error" then
+                          hs.status = "Degraded"
+                          hs.message = "Ultimo sync fallido: " .. (op.message or "")
+                          return hs
+                        end
+                      end
+                      local sync = "Unknown"
+                      if obj.status.sync ~= nil and obj.status.sync.status ~= nil then
+                        sync = obj.status.sync.status
+                      end
+                      if sync ~= "Synced" then
+                        -- Recien creada (antes de su primer auto-sync) o con cambios sin aplicar.
+                        hs.message = "Hija en " .. sync .. " sin operacion en curso"
+                        return hs
+                      end
+                      if obj.status.health ~= nil and obj.status.health.status ~= nil then
+                        hs.status = obj.status.health.status
+                        hs.message = obj.status.health.message or ""
+                      end
+                      return hs
+                    "resource.customizations.health.autoscaling_HorizontalPodAutoscaler": |
+                      -- Como el health integrado, salvo que la falta TRANSITORIA de metricas (Pods
+                      -- recien creados) es Progressing y no Degraded. Los errores de configuracion
+                      -- siguen Degraded. Sin esto, un HPA recien creado que aun no tiene metricas
+                      -- hace fallar la ola 1 de sa-platform por un ciclo de backoff evitable.
+                      -- Fuente: P9/docs/diseno-sync-waves.md §3.6.
+                      local hs = { status = "Progressing", message = "Esperando metricas del HPA" }
+                      if obj.status == nil or obj.status.conditions == nil then
+                        return hs
+                      end
+                      for _, c in ipairs(obj.status.conditions) do
+                        if (c.type == "AbleToScale" and (c.reason == "FailedGetScale" or c.reason == "FailedUpdateScale"))
+                           or (c.type == "ScalingActive" and c.reason == "InvalidSelector") then
+                          hs.status = "Degraded"
+                          hs.message = c.message or c.reason
+                          return hs
+                        end
+                      end
+                      for _, c in ipairs(obj.status.conditions) do
+                        if c.type == "ScalingActive" and c.status == "True" then
+                          hs.status = "Healthy"
+                          hs.message = c.message or ""
+                          return hs
+                        end
+                      end
+                      return hs
+                    "resource.customizations.health.kyverno.io_ClusterPolicy": |
+                      -- Backport del health de ArgoCD v3.6 (no existe en v3.5.3, la version instalada).
+                      -- Sin este Lua, kyverno.io/ClusterPolicy queda Healthy en cuanto se crea, antes
+                      -- de que Kyverno la cargue y configure el webhook: los Pods de la ola 0 se
+                      -- admitirian sin validar.
+                      -- Fuente: P9/docs/diseno-sync-waves.md §3.3.
+                      local hs = { status = "Progressing", message = "Esperando que Kyverno cargue la politica" }
+                      if obj.status ~= nil and obj.status.conditions ~= nil then
+                        for _, c in ipairs(obj.status.conditions) do
+                          if c.type == "Ready" then
+                            if c.status == "True" then
+                              hs.status = "Healthy"
+                            else
+                              hs.status = "Degraded"
+                            end
+                            hs.message = c.message or ""
+                            return hs
+                          end
+                        end
+                      end
+                      return hs
+                    "resource.customizations.health.velero.io_Schedule": |
+                      -- Backport del health de ArgoCD v3.6 (no existe en v3.5.3, la version instalada).
+                      -- Sin este Lua, un cron invalido deja el Schedule en FailedValidation en
+                      -- silencio: nunca mas hay respaldos y el RPO real se vuelve infinito sin que
+                      -- nada lo muestre.
+                      -- Fuente: P9/docs/diseno-sync-waves.md §3.5.
+                      local hs = { status = "Progressing", message = "Esperando que Velero valide el Schedule" }
+                      if obj.status ~= nil and obj.status.phase ~= nil then
+                        if obj.status.phase == "Enabled" then
+                          hs.status = "Healthy"
+                          hs.message = "Schedule habilitado"
+                        elseif obj.status.phase == "FailedValidation" then
+                          hs.status = "Degraded"
+                          hs.message = "Schedule con validacion fallida"
+                        else
+                          hs.message = obj.status.phase
+                        end
+                      end
+                      return hs
+                  "params":
+                    "controller.resource.health.persist": "true"
+                "crds":
+                  "keep": true
+                "dex":
+                  "enabled": false
+                "notifications":
+                  "enabled": false
+            EOT,
+        ]
+      + verify                     = false
+      + version                    = "10.9.2"
+      + wait                       = true
+      + wait_for_jobs              = false
+    }
+
+  # module.seed.helm_release.seed will be created
+  + resource "helm_release" "seed" {
+      + atomic                     = false
+      + chart                      = "argocd-apps"
+      + cleanup_on_fail            = false
+      + create_namespace           = false
+      + dependency_update          = false
+      + disable_crd_hooks          = false
+      + disable_openapi_validation = false
+      + disable_webhooks           = false
+      + force_update               = false
+      + id                         = (known after apply)
+      + lint                       = false
+      + max_history                = 0
+      + metadata                   = (known after apply)
+      + name                       = "p9-app-of-apps"
+      + namespace                  = "argocd"
+      + pass_credentials           = false
+      + recreate_pods              = false
+      + render_subchart_notes      = true
+      + replace                    = false
+      + repository                 = "https://argoproj.github.io/argo-helm"
+      + reset_values               = false
+      + reuse_values               = false
+      + set_wo                     = (write-only attribute)
+      + skip_crds                  = false
+      + status                     = "deployed"
+      + take_ownership             = false
+      + timeout                    = 300
+      + upgrade_install            = true
+      + values                     = [
+          + <<-EOT
+                "applications":
+                  "p9-root":
+                    "destination":
+                      "namespace": "argocd"
+                      "server": "https://kubernetes.default.svc"
+                    "namespace": "argocd"
+                    "project": "p9-bootstrap"
+                    "source":
+                      "directory":
+                        "recurse": false
+                      "path": "apps"
+                      "repoURL": "https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git"
+                      "targetRevision": "main"
+                    "syncPolicy":
+                      "automated":
+                        "prune": true
+                        "selfHeal": true
+                      "retry":
+                        "backoff":
+                          "duration": "15s"
+                          "factor": 2
+                          "maxDuration": "3m"
+                        "limit": -1
+                "projects":
+                  "p9-bootstrap":
+                    "clusterResourceWhitelist": []
+                    "description": "Solo la Application raiz del app-of-apps de P9."
+                    "destinations":
+                    - "namespace": "argocd"
+                      "server": "https://kubernetes.default.svc"
+                    "namespace": "argocd"
+                    "namespaceResourceWhitelist":
+                    - "group": "argoproj.io"
+                      "kind": "Application"
+                    "sourceRepos":
+                    - "https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git"
+                  "p9-platform":
+                    "clusterResourceWhitelist":
+                    - "group": "*"
+                      "kind": "*"
+                    "description": "Aplicaciones hijas de P9 - controladores, politicas y sa-platform."
+                    "destinations":
+                    - "namespace": "sa-p5"
+                      "server": "https://kubernetes.default.svc"
+                    - "namespace": "argo-rollouts"
+                      "server": "https://kubernetes.default.svc"
+                    - "namespace": "kyverno"
+                      "server": "https://kubernetes.default.svc"
+                    - "namespace": "kube-system"
+                      "server": "https://kubernetes.default.svc"
+                    - "namespace": "velero"
+                      "server": "https://kubernetes.default.svc"
+                    "namespace": "argocd"
+                    "sourceRepos":
+                    - "https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops.git"
+                    - "https://argoproj.github.io/argo-helm"
+                    - "https://kyverno.github.io/kyverno"
+                    - "https://bitnami.github.io/sealed-secrets"
+            EOT,
+        ]
+      + verify                     = false
+      + version                    = "2.0.5"
+      + wait                       = true
+      + wait_for_jobs              = false
+    }
+
+  # module.tenant.kubernetes_limit_range_v1.platform will be created
+  + resource "kubernetes_limit_range_v1" "platform" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-p5-platform-limits"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + spec {
+          + limit {
+              + default         = {
+                  + "cpu"    = "1"
+                  + "memory" = "1Gi"
+                }
+              + default_request = {
+                  + "cpu"    = "100m"
+                  + "memory" = "128Mi"
+                }
+              + type            = "Container"
+            }
+        }
+    }
+
+  # module.tenant.kubernetes_namespace_v1.sa_platform will be created
+  + resource "kubernetes_namespace_v1" "sa_platform" {
+      + id                               = (known after apply)
+      + wait_for_default_service_account = false
+
+      + metadata {
+          + generation       = (known after apply)
+          + labels           = {
+              + "app.kubernetes.io/managed-by" = "terraform"
+              + "practica"                     = "p9"
+            }
+          + name             = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+    }
+
+  # module.tenant.kubernetes_resource_quota_v1.platform will be created
+  + resource "kubernetes_resource_quota_v1" "platform" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-p5-platform-quota"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + spec {
+          + hard = {
+              + "limits.cpu"             = "3200m"
+              + "limits.memory"          = "8Gi"
+              + "persistentvolumeclaims" = "10"
+              + "pods"                   = "40"
+              + "requests.cpu"           = "2500m"
+              + "requests.memory"        = "6Gi"
+              + "services"               = "20"
+            }
+        }
+    }
+
+  # module.tenant.kubernetes_role_binding_v1.operator will be created
+  + resource "kubernetes_role_binding_v1" "operator" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-operator-binding"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + role_ref {
+          + api_group = "rbac.authorization.k8s.io"
+          + kind      = "Role"
+          + name      = "sa-platform-operator"
+        }
+
+      + subject {
+          + api_group = (known after apply)
+          + kind      = "ServiceAccount"
+          + name      = "sa-platform-operator"
+          + namespace = "sa-p5"
+        }
+    }
+
+  # module.tenant.kubernetes_role_binding_v1.viewer will be created
+  + resource "kubernetes_role_binding_v1" "viewer" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-viewer-binding"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + role_ref {
+          + api_group = "rbac.authorization.k8s.io"
+          + kind      = "Role"
+          + name      = "sa-platform-viewer"
+        }
+
+      + subject {
+          + api_group = (known after apply)
+          + kind      = "ServiceAccount"
+          + name      = "sa-platform-viewer"
+          + namespace = "sa-p5"
+        }
+    }
+
+  # module.tenant.kubernetes_role_v1.operator will be created
+  + resource "kubernetes_role_v1" "operator" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-operator"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + rule {
+          + api_groups = [
+              + null,
+            ]
+          + resources  = [
+              + "configmaps",
+              + "events",
+              + "persistentvolumeclaims",
+              + "pods",
+              + "services",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "apps",
+            ]
+          + resources  = [
+              + "deployments",
+              + "replicasets",
+              + "statefulsets",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "batch",
+            ]
+          + resources  = [
+              + "cronjobs",
+              + "jobs",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "argoproj.io",
+            ]
+          + resources  = [
+              + "analysisruns",
+              + "analysistemplates",
+              + "rollouts",
+              + "rollouts/status",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "patch",
+              + "watch",
+            ]
+        }
+    }
+
+  # module.tenant.kubernetes_role_v1.viewer will be created
+  + resource "kubernetes_role_v1" "viewer" {
+      + id = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-viewer"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+
+      + rule {
+          + api_groups = [
+              + null,
+            ]
+          + resources  = [
+              + "configmaps",
+              + "events",
+              + "persistentvolumeclaims",
+              + "pods",
+              + "services",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "apps",
+            ]
+          + resources  = [
+              + "deployments",
+              + "replicasets",
+              + "statefulsets",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "batch",
+            ]
+          + resources  = [
+              + "cronjobs",
+              + "jobs",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+      + rule {
+          + api_groups = [
+              + "argoproj.io",
+            ]
+          + resources  = [
+              + "analysisruns",
+              + "analysistemplates",
+              + "rollouts",
+            ]
+          + verbs      = [
+              + "get",
+              + "list",
+              + "watch",
+            ]
+        }
+    }
+
+  # module.tenant.kubernetes_service_account_v1.operator will be created
+  + resource "kubernetes_service_account_v1" "operator" {
+      + automount_service_account_token = true
+      + default_secret_name             = (known after apply)
+      + id                              = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-operator"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+    }
+
+  # module.tenant.kubernetes_service_account_v1.viewer will be created
+  + resource "kubernetes_service_account_v1" "viewer" {
+      + automount_service_account_token = true
+      + default_secret_name             = (known after apply)
+      + id                              = (known after apply)
+
+      + metadata {
+          + generation       = (known after apply)
+          + name             = "sa-platform-viewer"
+          + namespace        = "sa-p5"
+          + resource_version = (known after apply)
+          + uid              = (known after apply)
+        }
+    }
+
+  # module.velero.azurerm_federated_identity_credential.velero will be updated in-place
+  ~ resource "azurerm_federated_identity_credential" "velero" {
+        id                        = "/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero/federatedIdentityCredentials/fic-velero-server"
+      ~ issuer                    = "https://chilecentral.oic.prod-aks.azure.com/<guid-redactado>/<guid-redactado>/" -> "https://chilecentral.oic.prod-aks.azure.com/<guid-redactado>/<guid-redactado>/"
+        name                      = "fic-velero-server"
+        # (3 unchanged attributes hidden)
+    }
+
+  # module.velero.helm_release.velero will be created
+  + resource "helm_release" "velero" {
+      + atomic                     = false
+      + chart                      = "velero"
+      + cleanup_on_fail            = true
+      + create_namespace           = true
+      + dependency_update          = false
+      + disable_crd_hooks          = false
+      + disable_openapi_validation = false
+      + disable_webhooks           = false
+      + force_update               = false
+      + id                         = (known after apply)
+      + lint                       = false
+      + max_history                = 0
+      + metadata                   = (known after apply)
+      + name                       = "velero"
+      + namespace                  = "velero"
+      + pass_credentials           = false
+      + recreate_pods              = false
+      + render_subchart_notes      = true
+      + replace                    = false
+      + repository                 = "https://vmware-tanzu.github.io/helm-charts"
+      + reset_values               = false
+      + reuse_values               = false
+      + set_wo                     = (write-only attribute)
+      + skip_crds                  = false
+      + status                     = "deployed"
+      + take_ownership             = false
+      + timeout                    = 600
+      + upgrade_install            = true
+      + values                     = [
+          + <<-EOT
+                "cleanUpCRDs": false
+                "configMaps":
+                  "node-agent-config":
+                    "data":
+                      "node-agent-config.json": "{\"restorePVC\":{\"ignoreDelayBinding\":true}}"
+                "configuration":
+                  "backupStorageLocation":
+                  - "bucket": "velero-backups"
+                    "config":
+                      "resourceGroup": "rg-p9-tfstate"
+                      "storageAccount": "stp9veloc01f715c2e19"
+                      "subscriptionId": "<guid-redactado>"
+                      "useAAD": "true"
+                    "name": "default"
+                    "provider": "azure"
+                  "features": "EnableCSI"
+                  "volumeSnapshotLocation":
+                  - "config":
+                      "resourceGroup": "rg-p9-aks"
+                    "name": "default"
+                    "provider": "azure"
+                "credentials":
+                  "useSecret": false
+                "deployNodeAgent": true
+                "extraObjects":
+                - "apiVersion": "snapshot.storage.k8s.io/v1"
+                  "deletionPolicy": "Delete"
+                  "driver": "disk.csi.azure.com"
+                  "kind": "VolumeSnapshotClass"
+                  "metadata":
+                    "labels":
+                      "velero.io/csi-volumesnapshot-class": "true"
+                    "name": "p9-velero-azuredisk"
+                  "parameters":
+                    "incremental": "true"
+                "initContainers":
+                - "image": "velero/velero-plugin-for-microsoft-azure:v1.14.3"
+                  "imagePullPolicy": "IfNotPresent"
+                  "name": "velero-plugin-for-microsoft-azure"
+                  "volumeMounts":
+                  - "mountPath": "/target"
+                    "name": "plugins"
+                "nodeAgent":
+                  "extraArgs":
+                  - "--node-agent-configmap=velero-node-agent-config"
+                  "podLabels":
+                    "azure.workload.identity/use": "true"
+                "podLabels":
+                  "azure.workload.identity/use": "true"
+                "schedules": {}
+                "serviceAccount":
+                  "server":
+                    "annotations":
+                      "azure.workload.identity/client-id": "<guid-redactado>"
+                    "name": "velero-server"
+                "snapshotsEnabled": true
+                "upgradeCRDs": false
+            EOT,
+        ]
+      + verify                     = false
+      + version                    = "12.2.0"
+      + wait                       = true
+      + wait_for_jobs              = false
+    }
+
+Plan: 12 to add, 1 to change, 0 to destroy.
+
+Changes to Outputs:
+  ~ argocd_version   = "v3.5.3" -> (known after apply)
+Releasing state lock. This may take a few moments...
+2026-10-17T16:30:15Z [INFO]  [02-platform] plan con cambios (se aplicará exactamente este plan).
+Acquiring state lock. This may take a few moments...
+module.tenant.kubernetes_namespace_v1.sa_platform: Creating...
+module.tenant.kubernetes_namespace_v1.sa_platform: Creation complete after 0s [id=sa-p5]
+module.tenant.kubernetes_service_account_v1.operator: Creating...
+module.tenant.kubernetes_limit_range_v1.platform: Creating...
+module.tenant.kubernetes_role_v1.operator: Creating...
+module.tenant.kubernetes_role_v1.viewer: Creating...
+module.tenant.kubernetes_service_account_v1.viewer: Creating...
+module.tenant.kubernetes_resource_quota_v1.platform: Creating...
+module.tenant.kubernetes_limit_range_v1.platform: Creation complete after 1s [id=sa-p5/sa-p5-platform-limits]
+module.tenant.kubernetes_role_v1.operator: Creation complete after 1s [id=sa-p5/sa-platform-operator]
+module.argocd.helm_release.argocd: Creating...
+module.tenant.kubernetes_service_account_v1.operator: Creation complete after 1s [id=sa-p5/sa-platform-operator]
+module.tenant.kubernetes_service_account_v1.viewer: Creation complete after 1s [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_role_v1.viewer: Creation complete after 1s [id=sa-p5/sa-platform-viewer]
+module.tenant.kubernetes_resource_quota_v1.platform: Creation complete after 1s [id=sa-p5/sa-p5-platform-quota]
+module.tenant.kubernetes_role_binding_v1.operator: Creating...
+module.tenant.kubernetes_role_binding_v1.viewer: Creating...
+module.tenant.kubernetes_role_binding_v1.operator: Creation complete after 0s [id=sa-p5/sa-platform-operator-binding]
+module.tenant.kubernetes_role_binding_v1.viewer: Creation complete after 0s [id=sa-p5/sa-platform-viewer-binding]
+module.velero.azurerm_federated_identity_credential.velero: Modifying... [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero/federatedIdentityCredentials/fic-velero-server]
+module.velero.azurerm_federated_identity_credential.velero: Modifications complete after 5s [id=/subscriptions/<guid-redactado>/resourceGroups/rg-p9-tfstate/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-sa-p9-velero/federatedIdentityCredentials/fic-velero-server]
+module.velero.helm_release.velero: Creating...
+module.argocd.helm_release.argocd: Still creating... [00m10s elapsed]
+module.velero.helm_release.velero: Still creating... [00m10s elapsed]
+module.argocd.helm_release.argocd: Still creating... [00m20s elapsed]
+module.velero.helm_release.velero: Still creating... [00m20s elapsed]
+module.argocd.helm_release.argocd: Still creating... [00m30s elapsed]
+module.velero.helm_release.velero: Still creating... [00m30s elapsed]
+module.argocd.helm_release.argocd: Still creating... [00m40s elapsed]
+module.velero.helm_release.velero: Still creating... [00m40s elapsed]
+module.argocd.helm_release.argocd: Still creating... [00m50s elapsed]
+module.velero.helm_release.velero: Still creating... [00m50s elapsed]
+module.argocd.helm_release.argocd: Still creating... [01m00s elapsed]
+module.velero.helm_release.velero: Still creating... [01m00s elapsed]
+module.argocd.helm_release.argocd: Still creating... [01m10s elapsed]
+module.velero.helm_release.velero: Creation complete after 1m7s [id=velero]
+module.argocd.helm_release.argocd: Still creating... [01m20s elapsed]
+module.argocd.helm_release.argocd: Still creating... [01m30s elapsed]
+module.argocd.helm_release.argocd: Creation complete after 1m32s [id=argocd]
+module.seed.helm_release.seed: Creating...
+module.seed.helm_release.seed: Creation complete after 5s [id=p9-app-of-apps]
+Releasing state lock. This may take a few moments...
+
+Apply complete! Resources: 12 added, 1 changed, 0 destroyed.
+
+Outputs:
+
+app_namespace = "sa-p5"
+argocd_version = "v3.5.3"
+root_application = "argocd/p9-root"
+
+2026-10-17T16:32:07Z [STAGE] ===== 7. ArgoCD disponible y Lua de health cargado =====
+2026-10-17T16:32:07Z [INFO]  Esperando ArgoCD en argocd...
+deployment.apps/argocd-applicationset-controller condition met
+deployment.apps/argocd-redis condition met
+deployment.apps/argocd-repo-server condition met
+deployment.apps/argocd-server condition met
+partitioned roll out complete: 1 new pods have been updated...
+customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io condition met
+
+2026-10-17T16:32:11Z [STAGE] ===== 8. Olas del app-of-apps y raíz p9-root Synced/Healthy =====
+2026-10-17T16:32:12Z [INFO]  Application sealed-secrets: OutOfSync/Missing/Succeeded
+2026-10-17T16:32:23Z [INFO]  Application sealed-secrets: Synced/Healthy/Succeeded
+2026-10-17T16:32:23Z [INFO]  OLA -30 cerrada en 12s: sealed-secrets
+2026-10-17T16:32:24Z [INFO]  Application kyverno: //
+2026-10-17T16:32:34Z [INFO]  Application kyverno: OutOfSync/Missing/Running
+2026-10-17T16:32:56Z [INFO]  Application kyverno: OutOfSync/Healthy/Running
+2026-10-17T16:33:18Z [INFO]  Application kyverno: OutOfSync/Progressing/Running
+2026-10-17T16:34:33Z [INFO]  Application kyverno: Synced/Healthy/Running
+2026-10-17T16:35:06Z [INFO]  Application kyverno: Synced/Healthy/Succeeded
+2026-10-17T16:35:07Z [INFO]  Application argo-rollouts: Synced/Progressing/Succeeded
+2026-10-17T16:36:21Z [INFO]  Application argo-rollouts: Synced/Healthy/Succeeded
+2026-10-17T16:36:21Z [INFO]  OLA -20 cerrada en 238s: kyverno,argo-rollouts
+2026-10-17T16:36:22Z [INFO]  Application platform-secrets: Synced/Healthy/Succeeded
+2026-10-17T16:36:23Z [INFO]  Application data-restore: Synced/Healthy/Running
+2026-10-17T16:37:49Z [INFO]  Application data-restore: Synced/Healthy/Succeeded
+2026-10-17T16:37:50Z [INFO]  OLA -10 cerrada en 89s: platform-secrets,data-restore
+2026-10-17T16:37:50Z [INFO]  Application kyverno-policies: Synced/Healthy/Succeeded
+2026-10-17T16:37:51Z [INFO]  OLA -5 cerrada en 1s: kyverno-policies
+2026-10-17T16:37:52Z [INFO]  Application sa-platform: //
+2026-10-17T16:38:02Z [INFO]  Application sa-platform: OutOfSync/Progressing/Running
+2026-10-17T16:39:07Z [INFO]  Application sa-platform: Synced/Progressing/Succeeded
+2026-10-17T16:41:06Z [INFO]  Application sa-platform: Synced/Healthy/Succeeded
+2026-10-17T16:41:07Z [INFO]  OLA 0 cerrada en 196s: sa-platform
+2026-10-17T16:41:07Z [INFO]  Application velero-schedules: Synced/Healthy/Succeeded
+2026-10-17T16:41:07Z [INFO]  OLA 5 cerrada en 0s: velero-schedules
+2026-10-17T16:41:08Z [INFO]  Application platform-verify: Synced/Healthy/Running
+2026-10-17T16:41:19Z [INFO]  Application platform-verify: Synced/Healthy/Succeeded
+2026-10-17T16:41:19Z [INFO]  OLA 10 cerrada en 11s: platform-verify
+2026-10-17T16:41:20Z [INFO]  Application p9-root: Synced/Healthy/Succeeded
+
+2026-10-17T16:41:20Z [STAGE] ===== 9. [VELERO] Resultado de la restauración de datos =====
+2026-10-17T16:41:21Z [INFO]  data-restore: RESTORE_OK restore=p9-dr-20261017163641 backup=sa-p9-schedule-20261017054536 restore_inicio=2026-10-17T16:36:41Z restore_fin=2026-10-17T16:37:41Z items=7 advertencias=
+
+2026-10-17T16:41:21Z [STAGE] ===== 10. Controladores (Sealed Secrets, Argo Rollouts, Kyverno, Velero) y políticas en Enforce =====
+2026-10-17T16:41:21Z [INFO]  Verificando controladores...
+deployment "sealed-secrets-controller" successfully rolled out
+deployment.apps/argo-rollouts condition met
+deployment.apps/kyverno-admission-controller condition met
+deployment.apps/kyverno-background-controller condition met
+deployment.apps/kyverno-cleanup-controller condition met
+deployment.apps/kyverno-reports-controller condition met
+deployment.apps/velero condition met
+daemon set "node-agent" successfully rolled out
+backupstoragelocation.velero.io/default condition met
+schedule.velero.io/sa-p9-schedule condition met
+Warning: kyverno.io/v1 ClusterPolicy is deprecated and will be removed in a future release; migrate to ValidatingPolicy, MutatingPolicy, GeneratingPolicy or ImageValidatingPolicy (policies.kyverno.io), see https://kyverno.io/docs/guides/migration-to-cel/
+2026-10-17T16:41:28Z [INFO]  ClusterPolicies: require-non-root-user=Enforce restrict-image-registries=Enforce verify-image-signatures=Enforce 
+Warning: kyverno.io/v1 ClusterPolicy is deprecated and will be removed in a future release; migrate to ValidatingPolicy, MutatingPolicy, GeneratingPolicy or ImageValidatingPolicy (policies.kyverno.io), see https://kyverno.io/docs/guides/migration-to-cel/
+clusterpolicy.kyverno.io/require-non-root-user condition met
+clusterpolicy.kyverno.io/restrict-image-registries condition met
+clusterpolicy.kyverno.io/verify-image-signatures condition met
+
+2026-10-17T16:41:29Z [STAGE] ===== 11. Workloads de sa-p5 =====
+2026-10-17T16:41:29Z [INFO]  Esperando workloads en sa-p5...
+deployment.apps/sa-platform-auth condition met
+deployment.apps/sa-platform-catalog condition met
+deployment.apps/sa-platform-notifications condition met
+deployment.apps/sa-platform-orders condition met
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+Generación: 3, observada: 3, fase: Healthy (esperando: Healthy, 0s transcurridos)
+El Rollout alcanzó la fase esperada: Healthy
+
+2026-10-17T16:41:34Z [STAGE] ===== 12. Endpoint funcional =====
+2026-10-17T16:41:34Z [INFO]  Esperando IP pública del Service sa-platform-api-gateway...
+2026-10-17T16:41:34Z [INFO]  OK http://57.156.71.88/ready
+2026-10-17T16:41:35Z [INFO]  OK http://57.156.71.88/api/auth/health
+2026-10-17T16:41:35Z [INFO]  OK http://57.156.71.88/api/catalog/health
+2026-10-17T16:41:35Z [INFO]  OK http://57.156.71.88/api/orders/health
+2026-10-17T16:41:35Z [INFO]  Gateway respondiendo en http://57.156.71.88
+2026-10-17T16:41:35Z [INFO]  RTO_INICIO=2026-10-17T16:18:40Z RTO_FIN=2026-10-17T16:41:35Z RTO_SEGUNDOS=1375
+2026-10-17T16:41:35Z [INFO]  Bootstrap 'all' terminado en 1375s.

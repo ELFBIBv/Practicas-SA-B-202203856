@@ -69,7 +69,7 @@
     --query '{actualizado:attributes.updated, habilitado:attributes.enabled, etiquetas:tags}' -o json
   ```
 - **Resultado esperado:** `habilitado: true` y fecha de actualización. El comando **no** imprime el valor.
-- **Validación (opcional, sin clúster):** `SEALED_KEYRING_VAULT=kv-sa-p9-202203856 ./P9/scripts/verify-sealed-secrets-offline.sh` imprime `OK` por cada SealedSecret y termina con `rc=0`. Requiere `kubeseal`.
+- **Validación (opcional, sin clúster):** `SEALED_KEYRING_VAULT=kv-sa-p9-202203856 ./P9/scripts/verify-sealed-secrets-offline.sh` imprime `OK` por cada SealedSecret y termina con `rc=0`. Requiere `kubeseal` y, para renderizar el chart, el repo de Helm de NATS. En un equipo nuevo falla con `no repository definition for https://nats-io.github.io/k8s/helm/charts/`; regístrelo una vez: `helm repo add nats https://nats-io.github.io/k8s/helm/charts/ && helm repo update nats`.
 - **Contingencia:** si el secreto no existe y el clúster anterior sigue vivo, respáldelo antes de continuar: `SEALED_KEYRING_VAULT=kv-sa-p9-202203856 ./P9/scripts/backup-sealed-secrets-key.sh from-cluster <contexto>`. Si el clúster ya no existe y no hay copia, los SealedSecret actuales son **irrecuperables**: registre la pérdida en el informe, genere una llave nueva (`backup-sealed-secrets-key.sh generate`) y vuelva a sellar los secretos desde su fuente original (PAT de GHCR, contraseñas). Eso es génesis, no continuidad.
 
 ### R-0.4 Respaldos disponibles y modo de restauración estricto

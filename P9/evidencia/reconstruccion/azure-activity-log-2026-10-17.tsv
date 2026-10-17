@@ -1,0 +1,13 @@
+timestamp_utc	operacion	estado	recurso
+2026-10-17T05:58:45.5803204Z	Microsoft.ContainerService/managedClusters/delete	Started	aks-sa-p9
+2026-10-17T05:58:47.8772702Z	Microsoft.ContainerService/managedClusters/delete	Accepted	aks-sa-p9
+2026-10-17T05:58:58.7214222Z	Microsoft.Resources/subscriptions/resourcegroups/delete	Started	rg-p9-aks-nodes
+2026-10-17T05:58:58.9870593Z	Microsoft.Resources/subscriptions/resourcegroups/delete	Accepted	rg-p9-aks-nodes
+2026-10-17T06:00:36.3782879Z	Microsoft.Compute/disks/delete	Succeeded	pvc-<guid-redactado> (disco de PVC)
+2026-10-17T06:00:36.7354723Z	Microsoft.Compute/disks/delete	Succeeded	pvc-<guid-redactado> (disco de PVC)
+2026-10-17T06:00:37.7459659Z	Microsoft.Compute/disks/delete	Succeeded	pvc-<guid-redactado> (disco de PVC)
+2026-10-17T06:01:03.4332336Z	Microsoft.Resources/subscriptions/resourcegroups/delete	Succeeded	rg-p9-aks-nodes
+2026-10-17T06:03:51.9334114Z	Microsoft.ContainerService/managedClusters/delete	Succeeded	aks-sa-p9
+2026-10-17T06:04:26.118731Z	Microsoft.Resources/subscriptions/resourceGroups/delete	Started	rg-p9-aks
+2026-10-17T06:04:26.3531071Z	Microsoft.Resources/subscriptions/resourceGroups/delete	Accepted	rg-p9-aks
+2026-10-17T06:04:33.1051082Z	Microsoft.Resources/subscriptions/resourcegroups/delete	Succeeded	rg-p9-aks
