@@ -52,19 +52,22 @@ _argocd_diagnostics() {
     -o custom-columns='NS:.metadata.namespace,NOMBRE:.metadata.name,SYNCED:.status.conditions[?(@.type=="Synced")].status,MENSAJE:.status.conditions[?(@.type=="Synced")].message' >&2 || true
 }
 
-# wait_application <nombre> <timeout_s>: sondea sync/health cada 10 s y
-# registra cada transición, hasta Synced/Healthy o timeout.
+# wait_application <nombre> <timeout_s>: sondea sync/health/operación cada
+# 10 s y registra cada transición, hasta Synced/Healthy sin operación en curso
+# o timeout. La operación cuenta: un hook de Sync (p. ej. el Job
+# p9-data-restore) no entra en el health de la app, que se ve Healthy mientras
+# el hook sigue corriendo; la raíz (health/application.lua) tampoco avanza.
 wait_application() {
   local name=$1 timeout=$2 last="" cur deadline
   deadline=$((SECONDS + timeout))
   while :; do
     cur="$(kubectl -n "$P9_ARGOCD_NAMESPACE" get application "$name" \
-      -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null || true)"
+      -o jsonpath='{.status.sync.status}/{.status.health.status}/{.status.operationState.phase}' 2>/dev/null || true)"
     if [[ "$cur" != "$last" ]]; then
       log "Application $name: ${cur:-sin estado todavía}"
       last=$cur
     fi
-    [[ "$cur" == Synced/Healthy ]] && return 0
+    [[ "$cur" == Synced/Healthy/ || "$cur" == Synced/Healthy/Succeeded ]] && return 0
     if ((SECONDS >= deadline)); then
       _argocd_diagnostics
       die "La Application $name no llegó a Synced/Healthy en ${timeout}s (último: ${cur:-sin estado})."
