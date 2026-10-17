@@ -29,9 +29,9 @@ if [ "${1:-}" = "--init" ]; then
 # Datos de la entrega de la Practica 9.
 # Deben coincidir EXACTAMENTE con la tabla 4.1 del README de su entrega.
 
-CARNET="202012345"
-REPO_CODE="https://github.com/usuario/software-avanzado"
-REPO_GITOPS="https://github.com/usuario/software-avanzado-gitops"
+CARNET="202203856"
+REPO_CODE="https://github.com/ELFBIBv/Practicas-SA-B-202203856"
+REPO_GITOPS="https://github.com/ELFBIBv/Practicas-SA-B-202203856-gitops"
 
 APP_ROOT="raiz"              # aplicacion app-of-apps en ArgoCD
 NS="produccion"              # namespace de la aplicacion
@@ -171,7 +171,7 @@ else
   bad "Velero NO esta instalado"
 fi
 SCHED=$(kubectl get schedules -n "$NS_VELERO" -o json 2>/dev/null)
-NSCH=$(echo "${SCHED:-{}}" | jq '[.items[]?] | length' 2>/dev/null || echo 0)
+NSCH=$(echo "${SCHED:-"{}"}" | jq '[.items[]?] | length' 2>/dev/null || echo 0)
 if [ "${NSCH:-0}" -ge 1 ]; then
   ok "Respaldo programado ($NSCH schedule)"; VE=$((VE+3))
   echo "$SCHED" | jq -r 2>/dev/null '.items[]? | "  schedule=\(.metadata.name) cron=\(.spec.schedule) ttl=\(.spec.template.ttl // "sin ttl")"'
@@ -182,7 +182,7 @@ else
   bad "Sin respaldos programados: solo respaldos manuales"
 fi
 BK=$(kubectl get backups -n "$NS_VELERO" -o json 2>/dev/null)
-NOK=$(echo "${BK:-{}}" | jq '[.items[]? | select(.status.phase=="Completed")] | length' 2>/dev/null || echo 0)
+NOK=$(echo "${BK:-"{}"}" | jq '[.items[]? | select(.status.phase=="Completed")] | length' 2>/dev/null || echo 0)
 if [ "${NOK:-0}" -ge 1 ]; then
   ok "$NOK respaldo(s) completado(s)"; VE=$((VE+3))
   echo "$BK" | jq -r 2>/dev/null '[.items[]? | select(.status.phase=="Completed")] | sort_by(.status.completionTimestamp) | last
@@ -191,11 +191,11 @@ else
   bad "Ningun respaldo completado"; ELIM="$ELIM sin-respaldo"
 fi
 BSL=$(kubectl get backupstoragelocations -n "$NS_VELERO" -o json 2>/dev/null)
-echo "${BSL:-{}}" | jq -r 2>/dev/null '.items[]? | "  destino: provider=\(.spec.provider) bucket=\(.spec.objectStorage.bucket // "?") estado=\(.status.phase // "?")"' 2>/dev/null
-echo "${BSL:-{}}" | jq -e '.items[]? | select(.spec.provider != "" and (.spec.objectStorage.bucket // "") != "")' >/dev/null 2>&1 \
+echo "${BSL:-"{}"}" | jq -r 2>/dev/null '.items[]? | "  destino: provider=\(.spec.provider) bucket=\(.spec.objectStorage.bucket // "?") estado=\(.status.phase // "?")"' 2>/dev/null
+echo "${BSL:-"{}"}" | jq -e '.items[]? | select(.spec.provider != "" and (.spec.objectStorage.bucket // "") != "")' >/dev/null 2>&1 \
   && { ok "Destino de respaldo externo configurado"; VE=$((VE+2)); } \
   || bad "Destino de respaldo no configurado o interno al cluster"
-echo "${BK:-{}}" | jq -e '.items[]? | select((.spec.defaultVolumesToFsBackup == true) or (.spec.snapshotVolumes == true) or (.status.volumeSnapshotsAttempted // 0) > 0)' >/dev/null 2>&1 \
+echo "${BK:-"{}"}" | jq -e '.items[]? | select((.spec.defaultVolumesToFsBackup == true) or (.spec.snapshotVolumes == true) or (.status.volumeSnapshotsAttempted // 0) > 0)' >/dev/null 2>&1 \
   && { ok "Los respaldos incluyen volumenes persistentes"; VE=$((VE+2)); } \
   || bad "Los respaldos NO incluyen volumenes: se respalda solo la definicion"
 echo "  >> 2.3 = $VE / 14"
@@ -226,9 +226,11 @@ else
     bad "No se documenta el respaldo de la llave de Sealed Secrets"
     avi "Si se pierde esa llave, el repositorio queda lleno de secretos ilegibles"
   fi
-  echo "${BK:-{}}" | jq -e '.items[]? | select((.spec.includedNamespaces // []) | index("kube-system") or index("sealed-secrets"))' >/dev/null 2>&1 \
+  echo "${BK:-"{}"}" | jq -e '.items[]? | select((.spec.includedNamespaces // []) | index("kube-system") or index("sealed-secrets"))' >/dev/null 2>&1 \
     && { ok "El respaldo de Velero incluye el namespace de la llave"; SE=$((SE+3)); } \
-    || bad "El respaldo no cubre el namespace donde vive la llave"
+    || { grep -rqE 'keyvault secret (show|set)|secretsmanager (get|put)-secret-value|gcloud secrets versions' "$P9" 2>/dev/null \
+         && { ok "La llave se custodia fuera del cluster en un gestor de secretos externo"; SE=$((SE+3)); } \
+         || bad "El respaldo no cubre el namespace donde vive la llave"; }
 fi
 echo "  >> 2.4 = $SE / 8"
 
@@ -260,7 +262,7 @@ else
                     || bad "Sin volumenes persistentes en el namespace $NS"
 fi
 RS=$(kubectl get restores -n "$NS_VELERO" -o json 2>/dev/null)
-NRS=$(echo "${RS:-{}}" | jq '[.items[]? | select(.status.phase=="Completed" or .status.phase=="PartiallyFailed")] | length' 2>/dev/null || echo 0)
+NRS=$(echo "${RS:-"{}"}" | jq '[.items[]? | select(.status.phase=="Completed" or .status.phase=="PartiallyFailed")] | length' 2>/dev/null || echo 0)
 if [ "${NRS:-0}" -ge 1 ]; then
   ok "$NRS restauracion(es) ejecutada(s)"; DA=$((DA+3))
   echo "${RS}" | jq -r 2>/dev/null '.items[]? | "  restore=\(.metadata.name) fase=\(.status.phase) desde=\(.spec.backupName)"'
