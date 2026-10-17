@@ -14,6 +14,26 @@ spec:
     repoURL: https://kyverno.github.io/kyverno
     chart: kyverno
     targetRevision: 3.9.1
+    helm:
+      # Sus webhooks fallan cerrados (failurePolicy: Fail, también en DELETE de
+      # Pods). Con 1 réplica, drenar su nodo dejó el reemplazo Pending por CPU
+      # y bloqueó tanto los Pods nuevos de sa-p5 como el borrado de los
+      # desalojados: el drenaje no terminaba (prueba de nodo, 2026-10-17).
+      # 2 réplicas, una por nodo; con replicas > 1 el chart crea el PDB
+      # (minAvailable 1). Sin nodeTaintsPolicy: Honor a propósito: el nodo
+      # acordonado sigue contando, así el desalojado no se apila en el otro.
+      valuesObject:
+        admissionController:
+          replicas: 2
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              matchLabelKeys: [pod-template-hash]
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: admission-controller
+                  app.kubernetes.io/instance: kyverno
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
