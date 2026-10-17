@@ -12,6 +12,8 @@ module "cluster" {
   kubernetes_version  = var.kubernetes_version
   node_vm_size        = var.node_vm_size
   node_count          = var.node_count
+  spare_node_vm_size  = var.spare_node_vm_size
+  spare_node_count    = var.spare_node_count
   os_disk_size_gb     = var.os_disk_size_gb
   availability_zones  = var.availability_zones
 
