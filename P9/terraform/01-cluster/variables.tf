@@ -40,10 +40,11 @@ variable "node_count" {
 # Tercer nodo (otra familia, ver modules/cluster/main.tf): sin él no hay
 # capacidad N-1 y al drenar un nodo los reemplazos quedan Pending. Completa
 # la cuota regional de 6 vCPU, así que un upgrade con max_surge necesitaría
-# bajarlo a 0 antes.
+# bajarlo a 0 antes. D2s_v4 y no D2s_v3: Azure for Students no permite
+# D2s_v3 en chilecentral (400 BadRequest al crear el node pool).
 variable "spare_node_vm_size" {
   type    = string
-  default = "Standard_D2s_v3"
+  default = "Standard_D2s_v4"
 }
 
 variable "spare_node_count" {
